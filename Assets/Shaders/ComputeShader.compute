@@ -1,0 +1,189 @@
+﻿// kernels to compile...
+#pragma kernel HiZExample
+
+// Defines
+#define thread_group_size_x 1
+#define thread_group_size_y 1
+#define thread_group_size_z 1
+
+// Constants
+static float FRUSTUM_SIZE = 1.0;
+static int _MaxMipLevel = 16;
+
+// Input/Output
+uniform bool _ShouldLOD;
+uniform bool _ShouldHiZCull;
+uniform bool _ShouldFrustumCull;
+uniform float2 _TexSize;
+uniform float _AlwaysDrawRadius;
+uniform float _LOD00Distance;
+uniform float _LOD01Distance;
+uniform float _LOD02Distance;
+uniform float3 _CamPos;
+uniform float3 _BoundsCenter;
+uniform float3 _BoundsExtents;
+uniform float4x4 _UNITY_MATRIX_MVP;
+uniform Texture2D<float4> _HiZMap;
+uniform SamplerState sampler_HiZMap; // "sampler" + “_HiZMap”
+
+RWStructuredBuffer<float4> positionBuffer;
+RWStructuredBuffer<float4> colorBuffer;
+AppendStructuredBuffer<float4> lod0Buffer;
+AppendStructuredBuffer<float4> lod1Buffer;
+AppendStructuredBuffer<float4> lod2Buffer;
+
+
+// TEMP DEBUG VARIABLES!
+uniform float _MipLevelAddon;
+
+// Assign LOD Level
+inline void AssignLod(float4 pos, float4 clipmin)
+{
+	if (_ShouldLOD == false)
+	{
+		lod2Buffer.Append(pos);
+		return;
+	}
+	
+	float dist = abs(distance(pos.xyz, _CamPos));
+	if (dist < _LOD00Distance)
+	{
+		lod0Buffer.Append(pos);
+	}
+	else if (dist < _LOD01Distance)
+	{
+		lod1Buffer.Append(pos);
+	}
+	else if (dist < _LOD02Distance)
+	{
+		lod2Buffer.Append(pos);
+	}
+}
+
+
+// Check Hi-Z Culling
+// http://rastergrid.com/blog/2010/10/hierarchical-z-map-based-occlusion-culling/
+// https://github.com/nvpro-samples/gl_occlusion_culling
+inline bool ShouldHiZCull(float4 clipmin, float4 clipmax)
+{
+	if (_ShouldHiZCull == false)
+	{
+		return false;
+	}
+	
+    // Hi-Z approach that allows for more samples. Credit: 
+    // https://www.gamedev.net/blogs/entry/2249535-hierarchical-z-buffer-occlusion-culling-updated-07152011/
+    const    int numSamples = 32;
+    const    int   xSamples = numSamples + 1;
+    const    int   ySamples = numSamples + 1;
+    const  float    widthSS = (clipmax.x - clipmin.x);	
+    const  float   heightSS = (clipmax.y - clipmin.y);	
+    const  float  maxSizeSS = max(widthSS * _TexSize.x, heightSS * _TexSize.y);	
+    const  float        mip = max(0, ceil(log2(maxSizeSS))) + _MipLevelAddon;	
+    const  float      stepX = widthSS / xSamples;	
+    const  float      stepY = heightSS / ySamples;	
+    const float2    bOffset = 0.5 / _TexSize;
+    
+    float HIZdepth	= 0;	
+    float yPos = 1.0 - clipmax.y;
+    for(int y = 0; y < xSamples; ++y)
+    {
+        float xPos = clipmin.x; 
+        
+        for(int x = 0; x < ySamples; ++x)
+        {
+            const float2 nCoords0 = float2(xPos, yPos) + bOffset;
+            HIZdepth = max(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, nCoords0, mip).r);
+            xPos += stepX; 
+        } 
+
+        yPos += stepY;	
+    }
+    
+    bool shouldBeRendered = clipmin.z >= HIZdepth;
+    return shouldBeRendered == false;
+}
+
+// Check if position is in view frustum
+inline bool ShouldFrustumCull(float4 clipmin, float4 clipmax)
+{
+	if (_ShouldFrustumCull == false)
+	{
+		return false;
+	}
+	
+	bool isInsideFrustum = clipmin.x < 1.0 // X pos
+                           && clipmax.x > 0.0 // X pos
+                           && clipmin.y < 1.0 // Y pos
+                           && clipmax.y > 0.0 // Y pos
+                           && clipmin.z > 0.0 // Z pos Depth
+                            ;
+    return isInsideFrustum == false;
+}
+
+inline void CalculateClipMinAndMax(in float4 pos, inout float4 clipmin, inout float4 clipmax)
+{
+	float scale = pos.w;
+	float4 boxCorners[8];
+	boxCorners[0] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3(-1.0, -1.0, -1.0)), 1.0));
+	boxCorners[1] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3(-1.0, -1.0,  1.0)), 1.0));
+	boxCorners[2] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3(-1.0,  1.0, -1.0)), 1.0));
+	boxCorners[3] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3(-1.0,  1.0,  1.0)), 1.0));
+	boxCorners[4] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3( 1.0, -1.0, -1.0)), 1.0));
+	boxCorners[5] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3( 1.0, -1.0,  1.0)), 1.0));
+	boxCorners[6] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3( 1.0,  1.0, -1.0)), 1.0));
+	boxCorners[7] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3( 1.0,  1.0,  1.0)), 1.0));
+    
+	clipmin = boxCorners[0] / boxCorners[0].w;
+	clipmin.z = 1.0 - clipmin.z;
+	//clipmin.xy = clamp(clipmin.xy, -1, 1);
+	clipmin.xy = clipmin.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+	//clipmin.z = max(clipmin.z, 0);
+	
+	clipmax = boxCorners[0] / boxCorners[0].w;
+	clipmax.z = 1.0 - clipmax.z;
+	//clipmax.xy = clamp(clipmax.xy, -1, 1);
+    clipmax.xy = clipmax.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+	//clipmax.z = max(clipmax.z, 0);
+	
+	for (int n = 0; n < 8; n++)
+	{
+		float4 clipPos = boxCorners[n] / boxCorners[n].w;
+		clipPos.z = 1.0 - clipPos.z;
+		
+		// Make the values go from -1 <=> 1 to 0 -> 1
+		//clipPos.xy = clamp(clipPos.xy, -1, 1);
+        clipPos.xy = clipPos.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+		//clipPos.z = max(clipPos.z, 0);
+            
+		clipmin.xyz = min(clipmin.xyz, clipPos.xyz);
+		clipmax.xyz = max(clipmax.xyz, clipPos.xyz);
+	}
+}
+
+[numthreads(thread_group_size_x, thread_group_size_y, thread_group_size_z)]
+inline void HiZExample (uint3 id : SV_DispatchThreadID)
+{
+    // Calculate the instance index
+	uint index = id.x + id.y + id.z;
+	
+    // Calculate the min and max positions of the instance bounds
+	float4 pos = positionBuffer[index];
+    float4 clipmin;
+    float4 clipmax;
+    CalculateClipMinAndMax(pos, clipmin, clipmax);
+    
+    // Culling
+    if (ShouldFrustumCull(clipmin, clipmax))
+    {
+        return;
+    }
+    
+    if (ShouldHiZCull(clipmin, clipmax))
+    {
+        return;
+    }
+    
+    // LOD
+    AssignLod(pos, clipmin);
+}
