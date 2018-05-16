@@ -1,4 +1,4 @@
-Shader "HierarchicalZOcclusion/BufferGenerater"
+Shader "HiZ/BufferGenerate"
 {
     Properties
     {
@@ -15,7 +15,7 @@ Shader "HierarchicalZOcclusion/BufferGenerater"
             #pragma target 4.5
             #pragma vertex vertex
             #pragma fragment blit
-            #include "HiZBufferGenerateInclude.cginc"
+            #include "HiZInclude.cginc"
             ENDCG
         }
 
@@ -25,7 +25,7 @@ Shader "HierarchicalZOcclusion/BufferGenerater"
             #pragma target 4.5
             #pragma vertex vertex
             #pragma fragment reduce
-            #include "HiZBufferGenerateInclude.cginc"
+            #include "HiZInclude.cginc"
             ENDCG
         }
     }
@@ -40,7 +40,7 @@ Shader "HierarchicalZOcclusion/BufferGenerater"
             #pragma target 4.6
             #pragma vertex vertex
             #pragma fragment blit
-            #include "HiZBufferGenerateInclude.cginc"
+            #include "HiZInclude.cginc"
             ENDCG
         }
 
@@ -50,7 +50,7 @@ Shader "HierarchicalZOcclusion/BufferGenerater"
             #pragma target 4.6
             #pragma vertex vertex
             #pragma fragment reduce
-            #include "HiZBufferGenerateInclude.cginc"
+            #include "HiZInclude.cginc"
             ENDCG
         }
     }

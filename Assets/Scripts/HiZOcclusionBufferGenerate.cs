@@ -1,3 +1,5 @@
+// https://github.com/gokselgoktas/hi-z-buffer
+
 using UnityEngine;
 using UnityEngine.Rendering;
 using System.Collections.Generic;
@@ -11,7 +13,7 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
     [Header("References")]
     [SerializeField] private Shader m_generateBufferShader = null;
     [SerializeField] private Shader m_debugShader = null;
-
+    public IndirectRenderer hiZController;
     // Private 
     private int m_LODCount = 0;
     private int[] m_Temporaries = null;
@@ -20,16 +22,16 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
     private Material m_debugMaterial = null;
     private RenderTexture m_HiZDepthTexture = null;
     private CommandBuffer m_CommandBuffer = null;
-    private CameraEvent m_CameraEvent = CameraEvent.AfterGBuffer;
-
+    private CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
+    
     // Public Properties
     public int DebugLodLevel { get; set; }
     public bool DebugModeEnabled { get; set; }
     public Vector2 TextureSize { get; private set; }
     public RenderTexture HiZDepthTexture { get { return m_HiZDepthTexture; } }
-
+    
     // Consts
-    private const int MAXIMUM_BUFFER_SIZE = 2048;
+    private const int MAXIMUM_BUFFER_SIZE = 512;
 
     // Enums
     private enum Pass
@@ -42,10 +44,11 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
 
     #region MonoBehaviour
 
-    private void Awake()
+    private void Start()
     {
         m_generateBufferMaterial = new Material(m_generateBufferShader);
         m_debugMaterial = new Material(m_debugShader);
+
         m_camera = GetComponent<Camera>();
         m_camera.depthTextureMode = DepthTextureMode.Depth;
     }
@@ -72,13 +75,12 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
             m_HiZDepthTexture = null;
         }
     }
-
     
-    private void OnPreRender()
+    private void Update()
     {
         TextureSize = new Vector2(Mathf.NextPowerOfTwo(m_camera.pixelWidth), Mathf.NextPowerOfTwo(m_camera.pixelHeight));
         m_LODCount = (int) Mathf.Floor(Mathf.Log(TextureSize.x, 2f));
-
+        
         bool isCommandBufferInvalid = false;
         if (m_LODCount == 0)
         {
@@ -103,7 +105,7 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
             m_HiZDepthTexture.hideFlags = HideFlags.HideAndDontSave;
             isCommandBufferInvalid = true;
         }
-
+        
         if (m_CommandBuffer == null || isCommandBufferInvalid == true)
         {
             m_Temporaries = new int[m_LODCount];
@@ -115,8 +117,12 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
 
             m_CommandBuffer = new CommandBuffer();
             m_CommandBuffer.name = "Hi-Z Buffer";
+            
+            // m_CommandBuffer.DrawMeshInstancedIndirect(hiZController.m_boundingBoxMesh, 0, hiZController.m_allMaterial, 0, hiZController.m_allArgsBuffer,0, null);
 
             RenderTargetIdentifier id = new RenderTargetIdentifier(m_HiZDepthTexture);
+            m_CommandBuffer.SetRenderTarget(m_HiZDepthTexture);
+            
             m_CommandBuffer.Blit(null, id, m_generateBufferMaterial, (int) Pass.Blit);
 
 
@@ -128,8 +134,6 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
                 width = width >>= 1;
                 int height = ((int) TextureSize.y);
                 height = height >>= 1;
-//                TextureSize.x >>= 1;
-//                TextureSize.y >>= 1;
 
                 if (width == 0)
                 {
@@ -162,17 +166,15 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
             }
 
             m_CommandBuffer.ReleaseTemporaryRT(m_Temporaries[m_LODCount - 1]);
+            // m_CommandBuffer.ClearRenderTarget(true, true, Color.cyan);
             
             m_camera.AddCommandBuffer(m_CameraEvent, m_CommandBuffer);
         }
-        
-        
     }
     
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        if (DebugModeEnabled == false
-        || HiZDepthTexture == null)
+        if (DebugModeEnabled == false || HiZDepthTexture == null)
         {
             Graphics.Blit(source, destination);
             return;

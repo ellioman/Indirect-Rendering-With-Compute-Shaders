@@ -1,189 +1,420 @@
-﻿// kernels to compile...
-#pragma kernel HiZExample
+﻿// TODO: clipmin and clipmax could be float3...
+
+
+// ------------------------------------------------------------------
+
+// LOD00 => 0 -> X
+// LOD01 => X -> Y
+// LOD02 => Y -> Z
+
+// ------------------------------------------------------------------
+
+
+// kernels to compile...
+#pragma kernel CSMain
+// #pragma kernel CSMain2
 
 // Defines
-#define thread_group_size_x 1
-#define thread_group_size_y 1
-#define thread_group_size_z 1
+#define THREAD_GROUP_SIZE_X 64
+#define THREAD_GROUP_SIZE_Y 1
+#define THREAD_GROUP_SIZE_Z 1
+#define ALWAYS_DRAW_RANGE 50
+#define SHOULD_FRUSTUM_CULL 1
+#define SHOULD_SHADOW_CULL 1
+#define SHOULD_OCCLUSION_CULL 1
+#define SHOULD_LOD 1
 
-// Constants
-static float FRUSTUM_SIZE = 1.0;
-static int _MaxMipLevel = 16;
+// Structs
+struct FrustumPlane
+{
+	float4 normal;
+	float3 pointOnPlane;
+};
 
-// Input/Output
-uniform bool _ShouldLOD;
-uniform bool _ShouldHiZCull;
-uniform bool _ShouldFrustumCull;
-uniform float2 _TexSize;
-uniform float _AlwaysDrawRadius;
-uniform float _LOD00Distance;
-uniform float _LOD01Distance;
-uniform float _LOD02Distance;
-uniform float3 _CamPos;
-uniform float3 _BoundsCenter;
-uniform float3 _BoundsExtents;
+struct BoundingBox
+{
+	float4 corners[8];
+	float3 center;
+	float3 minPos;
+	float3 maxPos;
+};
+
+struct ComputeShaderInputData
+{
+	float numOfInstances; 	// 1
+	float4 position; 		// 5
+	float3 boundsCenter; 	// 8
+	float3 boundsExtents; 	// 11
+	float lod00Range; 		// 12
+	float lod01Range; 		// 13
+	float lod02Range; 		// 14
+	float unused1; 			// 15
+	float unused2; 			// 16
+};
+
+// Input
+globallycoherent RWStructuredBuffer<ComputeShaderInputData> positionBuffer;
+globallycoherent RWStructuredBuffer<uint> argsBuffer;
+globallycoherent RWStructuredBuffer<uint> indexOffsetBuffer;
+
+AppendStructuredBuffer<float4> lod00PositionsBuffer;
+AppendStructuredBuffer<float4> lod01PositionsBuffer;
+AppendStructuredBuffer<float4> lod02PositionsBuffer;
+
+uniform float _ShadowCullingLength;
+uniform float3 _LightDirection;
 uniform float4x4 _UNITY_MATRIX_MVP;
+uniform float2 _HiZTextureSize;
+uniform float3 _CamPos;
 uniform Texture2D<float4> _HiZMap;
 uniform SamplerState sampler_HiZMap; // "sampler" + “_HiZMap”
-
-RWStructuredBuffer<float4> positionBuffer;
-RWStructuredBuffer<float4> colorBuffer;
-AppendStructuredBuffer<float4> lod0Buffer;
-AppendStructuredBuffer<float4> lod1Buffer;
-AppendStructuredBuffer<float4> lod2Buffer;
+uniform uint _NumberOfInstances;
+uniform float _Test;
 
 
-// TEMP DEBUG VARIABLES!
-uniform float _MipLevelAddon;
-
-// Assign LOD Level
-inline void AssignLod(float4 pos, float4 clipmin)
+inline bool AreDirectionsFacingEachother(float3 dir1, float3 dir2)
 {
-	if (_ShouldLOD == false)
-	{
-		lod2Buffer.Append(pos);
-		return;
-	}
-	
-	float dist = abs(distance(pos.xyz, _CamPos));
-	if (dist < _LOD00Distance)
-	{
-		lod0Buffer.Append(pos);
-	}
-	else if (dist < _LOD01Distance)
-	{
-		lod1Buffer.Append(pos);
-	}
-	else if (dist < _LOD02Distance)
-	{
-		lod2Buffer.Append(pos);
-	}
+	return dot(dir1, dir2) > 0.0;
 }
 
-
-// Check Hi-Z Culling
-// http://rastergrid.com/blog/2010/10/hierarchical-z-map-based-occlusion-culling/
-// https://github.com/nvpro-samples/gl_occlusion_culling
-inline bool ShouldHiZCull(float4 clipmin, float4 clipmax)
+inline void CalculateClipMinAndMax(in BoundingBox boxCorners, in float4 pos, inout float3 clipmin, inout float3 clipmax)
 {
-	if (_ShouldHiZCull == false)
-	{
-		return false;
-	}
-	
-    // Hi-Z approach that allows for more samples. Credit: 
-    // https://www.gamedev.net/blogs/entry/2249535-hierarchical-z-buffer-occlusion-culling-updated-07152011/
-    const    int numSamples = 32;
-    const    int   xSamples = numSamples + 1;
-    const    int   ySamples = numSamples + 1;
-    const  float    widthSS = (clipmax.x - clipmin.x);	
-    const  float   heightSS = (clipmax.y - clipmin.y);	
-    const  float  maxSizeSS = max(widthSS * _TexSize.x, heightSS * _TexSize.y);	
-    const  float        mip = max(0, ceil(log2(maxSizeSS))) + _MipLevelAddon;	
-    const  float      stepX = widthSS / xSamples;	
-    const  float      stepY = heightSS / ySamples;	
-    const float2    bOffset = 0.5 / _TexSize;
-    
-    float HIZdepth	= 0;	
-    float yPos = 1.0 - clipmax.y;
-    for(int y = 0; y < xSamples; ++y)
-    {
-        float xPos = clipmin.x; 
-        
-        for(int x = 0; x < ySamples; ++x)
-        {
-            const float2 nCoords0 = float2(xPos, yPos) + bOffset;
-            HIZdepth = max(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, nCoords0, mip).r);
-            xPos += stepX; 
-        } 
+	boxCorners.corners[0] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[0]);
+	boxCorners.corners[1] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[1]);
+	boxCorners.corners[2] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[2]);
+	boxCorners.corners[3] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[3]);
+	boxCorners.corners[4] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[4]);
+	boxCorners.corners[5] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[5]);
+	boxCorners.corners[6] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[6]);
+	boxCorners.corners[7] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[7]);
 
-        yPos += stepY;	
-    }
-    
-    bool shouldBeRendered = clipmin.z >= HIZdepth;
-    return shouldBeRendered == false;
-}
-
-// Check if position is in view frustum
-inline bool ShouldFrustumCull(float4 clipmin, float4 clipmax)
-{
-	if (_ShouldFrustumCull == false)
-	{
-		return false;
-	}
-	
-	bool isInsideFrustum = clipmin.x < 1.0 // X pos
-                           && clipmax.x > 0.0 // X pos
-                           && clipmin.y < 1.0 // Y pos
-                           && clipmax.y > 0.0 // Y pos
-                           && clipmin.z > 0.0 // Z pos Depth
-                            ;
-    return isInsideFrustum == false;
-}
-
-inline void CalculateClipMinAndMax(in float4 pos, inout float4 clipmin, inout float4 clipmax)
-{
-	float scale = pos.w;
-	float4 boxCorners[8];
-	boxCorners[0] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3(-1.0, -1.0, -1.0)), 1.0));
-	boxCorners[1] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3(-1.0, -1.0,  1.0)), 1.0));
-	boxCorners[2] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3(-1.0,  1.0, -1.0)), 1.0));
-	boxCorners[3] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3(-1.0,  1.0,  1.0)), 1.0));
-	boxCorners[4] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3( 1.0, -1.0, -1.0)), 1.0));
-	boxCorners[5] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3( 1.0, -1.0,  1.0)), 1.0));
-	boxCorners[6] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3( 1.0,  1.0, -1.0)), 1.0));
-	boxCorners[7] = mul(_UNITY_MATRIX_MVP, float4(pos.xyz + _BoundsCenter + _BoundsExtents * (scale * float3( 1.0,  1.0,  1.0)), 1.0));
-    
-	clipmin = boxCorners[0] / boxCorners[0].w;
+	clipmin = (boxCorners.corners[0] / boxCorners.corners[0].w).xyz;
 	clipmin.z = 1.0 - clipmin.z;
-	//clipmin.xy = clamp(clipmin.xy, -1, 1);
 	clipmin.xy = clipmin.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
-	//clipmin.z = max(clipmin.z, 0);
 	
-	clipmax = boxCorners[0] / boxCorners[0].w;
+	clipmax = (boxCorners.corners[0] / boxCorners.corners[0].w).xyz;
 	clipmax.z = 1.0 - clipmax.z;
-	//clipmax.xy = clamp(clipmax.xy, -1, 1);
     clipmax.xy = clipmax.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
-	//clipmax.z = max(clipmax.z, 0);
 	
 	for (int n = 0; n < 8; n++)
 	{
-		float4 clipPos = boxCorners[n] / boxCorners[n].w;
+		float4 clipPos = boxCorners.corners[n] / boxCorners.corners[n].w;
 		clipPos.z = 1.0 - clipPos.z;
-		
-		// Make the values go from -1 <=> 1 to 0 -> 1
-		//clipPos.xy = clamp(clipPos.xy, -1, 1);
         clipPos.xy = clipPos.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
-		//clipPos.z = max(clipPos.z, 0);
-            
 		clipmin.xyz = min(clipmin.xyz, clipPos.xyz);
 		clipmax.xyz = max(clipmax.xyz, clipPos.xyz);
 	}
 }
 
-[numthreads(thread_group_size_x, thread_group_size_y, thread_group_size_z)]
-inline void HiZExample (uint3 id : SV_DispatchThreadID)
+// Check Hi-Z Culling
+// http://rastergrid.com/blog/2010/10/hierarchical-z-map-based-occlusion-culling/
+// https://github.com/nvpro-samples/gl_occlusion_culling
+// http://blog.selfshadow.com/publications/practical-visibility/
+inline bool ShouldHiZCull(float3 clipmin, float3 clipmax)
+{
+	if (SHOULD_OCCLUSION_CULL == false)
+	{
+		return false;
+	}
+
+	// We skip when it's behind because we might need the object for shadows
+	if (clipmin.z < 0.0)
+	{
+		return false;
+	}
+	
+	// BUG! This variable shouldn't be needed!
+	// With it we get semi correct occlusion culling, without it the culling behaves wrong
+	const float mipLevelAddon = 2;
+
+    // Hi-Z approach that allows for more samples.
+    // https://www.gamedev.net/blogs/entry/2249535-hierarchical-z-buffer-occlusion-culling-updated-07152011/
+    const    int numSamples = 8;
+    const    int   xSamples = numSamples + 1;
+    const    int   ySamples = numSamples + 1;
+    const  float    widthSS = (clipmax.x - clipmin.x);	
+    const  float   heightSS = (clipmax.y - clipmin.y);	
+    const  float  maxSizeSS = max(widthSS * _HiZTextureSize.x, heightSS * _HiZTextureSize.y);	
+    const  float        mip = max(0, ceil(log2(maxSizeSS))) + mipLevelAddon;	
+    const  float      stepX = widthSS / xSamples;	
+    const  float      stepY = heightSS / ySamples;	
+    const float2    bOffset = 0.5 / _HiZTextureSize;
+    
+    float HIZdepth	= 0;	
+    float yPos = 1.0 - clipmax.y;
+    for(int y = 0; y < xSamples; ++y)
+    {
+        float xPos = clipmin.x;
+        for(int x = 0; x < ySamples; ++x)
+        {
+            const float2 nCoords0 = float2(xPos, yPos) + bOffset;
+            HIZdepth = max(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, nCoords0, mip).r);
+            xPos += stepX; 
+        }
+        yPos += stepY;	
+    }
+    
+    bool shouldBeRendered = clipmin.z >= HIZdepth - clipmin.z * 0.01;
+    return shouldBeRendered == false;
+}
+
+inline void GetBoxCorners(in float3 center, in float3 extents, inout BoundingBox boxCorners)
+{
+	boxCorners.center = center;
+	boxCorners.minPos = center - extents;
+	boxCorners.maxPos = center + extents;
+	boxCorners.corners[0] = float4(center + extents * float3(-1.0, -1.0, -1.0), 1.0);
+	boxCorners.corners[1] = float4(center + extents * float3(-1.0, -1.0,  1.0), 1.0);
+	boxCorners.corners[4] = float4(center + extents * float3( 1.0, -1.0, -1.0), 1.0);
+	boxCorners.corners[5] = float4(center + extents * float3( 1.0, -1.0,  1.0), 1.0);
+	boxCorners.corners[2] = float4(center + extents * float3(-1.0,  1.0, -1.0), 1.0);
+	boxCorners.corners[3] = float4(center + extents * float3(-1.0,  1.0,  1.0), 1.0);
+	boxCorners.corners[6] = float4(center + extents * float3( 1.0,  1.0, -1.0), 1.0);
+	boxCorners.corners[7] = float4(center + extents * float3( 1.0,  1.0,  1.0), 1.0);
+}
+
+inline void CalculateCameraPlanes(inout FrustumPlane mPlanes[5])
+{
+	// Here we are using Column Major matrix
+	// We skip the far plane and assume the user always has the furthest LOD distace closer than the far plane!
+
+	// Row Major Matrix
+    // _m00, _m01, _m02, _m03
+    // _m10, _m11, _m12, _m13
+    // _m20, _m21, _m22, _m23
+    // _m30, _m31, _m32, _m33
+
+	// Column Major Matrix
+	// _m00, _m10, _m20, _m30
+	// _m01, _m11, _m21, _m31
+	// _m02, _m12, _m22, _m32
+	// _m03, _m13, _m23, _m33
+
+
+	// Left clipping plane.
+	mPlanes[0].normal = float4(
+		_UNITY_MATRIX_MVP._m30 + _UNITY_MATRIX_MVP._m00, 
+		_UNITY_MATRIX_MVP._m31 + _UNITY_MATRIX_MVP._m01, 
+		_UNITY_MATRIX_MVP._m32 + _UNITY_MATRIX_MVP._m02, 
+		_UNITY_MATRIX_MVP._m33 + _UNITY_MATRIX_MVP._m03
+	);
+
+	// Right clipping plane.
+	mPlanes[1].normal = float4(
+		_UNITY_MATRIX_MVP._m30 - _UNITY_MATRIX_MVP._m00, 
+		_UNITY_MATRIX_MVP._m31 - _UNITY_MATRIX_MVP._m01, 
+		_UNITY_MATRIX_MVP._m32 - _UNITY_MATRIX_MVP._m02, 
+		_UNITY_MATRIX_MVP._m33 - _UNITY_MATRIX_MVP._m03
+	);
+
+	// Bottom clipping plane.
+	mPlanes[2].normal = float4(
+		_UNITY_MATRIX_MVP._m30 + _UNITY_MATRIX_MVP._m10, 
+		_UNITY_MATRIX_MVP._m31 + _UNITY_MATRIX_MVP._m11, 
+		_UNITY_MATRIX_MVP._m32 + _UNITY_MATRIX_MVP._m12, 
+		_UNITY_MATRIX_MVP._m33 + _UNITY_MATRIX_MVP._m13
+	);
+
+	// Top clipping plane.
+	mPlanes[3].normal = float4(
+		_UNITY_MATRIX_MVP._m30 - _UNITY_MATRIX_MVP._m10, 
+		_UNITY_MATRIX_MVP._m31 - _UNITY_MATRIX_MVP._m11, 
+		_UNITY_MATRIX_MVP._m32 - _UNITY_MATRIX_MVP._m12, 
+		_UNITY_MATRIX_MVP._m33 - _UNITY_MATRIX_MVP._m13
+	);
+
+	// Near clipping plane.
+	mPlanes[4].normal = float4(
+		_UNITY_MATRIX_MVP._m30 + _UNITY_MATRIX_MVP._m20, 
+		_UNITY_MATRIX_MVP._m31 + _UNITY_MATRIX_MVP._m21, 
+		_UNITY_MATRIX_MVP._m32 + _UNITY_MATRIX_MVP._m22, 
+		_UNITY_MATRIX_MVP._m33 + _UNITY_MATRIX_MVP._m23
+	);
+
+	// Far clipping plane.
+	// mPlanes[5].normal = float4(
+	// 	_UNITY_MATRIX_MVP._m30 - _UNITY_MATRIX_MVP._m20, 
+	// 	_UNITY_MATRIX_MVP._m31 - _UNITY_MATRIX_MVP._m21, 
+	// 	_UNITY_MATRIX_MVP._m32 - _UNITY_MATRIX_MVP._m22, 
+	// 	_UNITY_MATRIX_MVP._m33 - _UNITY_MATRIX_MVP._m23
+	// );
+	
+	// Normalize the planes => normalizedPlane = (plane.xyzw) / sqrt(plane.x^2 + plane.y^2 + plane.z^2)
+	// plane.xyz is now the normal and plane.w contains the distance from zero pos to the plane
+	mPlanes[0].normal /= sqrt(mPlanes[0].normal.x * mPlanes[0].normal.x + mPlanes[0].normal.y * mPlanes[0].normal.y + mPlanes[0].normal.z * mPlanes[0].normal.z);
+	mPlanes[1].normal /= sqrt(mPlanes[1].normal.x * mPlanes[1].normal.x + mPlanes[1].normal.y * mPlanes[1].normal.y + mPlanes[1].normal.z * mPlanes[1].normal.z);
+	mPlanes[2].normal /= sqrt(mPlanes[2].normal.x * mPlanes[2].normal.x + mPlanes[2].normal.y * mPlanes[2].normal.y + mPlanes[2].normal.z * mPlanes[2].normal.z);
+	mPlanes[3].normal /= sqrt(mPlanes[3].normal.x * mPlanes[3].normal.x + mPlanes[3].normal.y * mPlanes[3].normal.y + mPlanes[3].normal.z * mPlanes[3].normal.z);
+	mPlanes[4].normal /= sqrt(mPlanes[4].normal.x * mPlanes[4].normal.x + mPlanes[4].normal.y * mPlanes[4].normal.y + mPlanes[4].normal.z * mPlanes[4].normal.z);
+	// mPlanes[5].normal /= sqrt(mPlanes[5].normal.x * mPlanes[5].normal.x + mPlanes[5].normal.y * mPlanes[5].normal.y + mPlanes[5].normal.z * mPlanes[5].normal.z);
+	
+	// Assign a single point that's on the plane
+	mPlanes[0].pointOnPlane = _CamPos;
+	mPlanes[1].pointOnPlane = _CamPos;
+	mPlanes[2].pointOnPlane = _CamPos;
+	mPlanes[3].pointOnPlane = _CamPos;
+	mPlanes[4].pointOnPlane = _CamPos;
+	// mPlanes[5].pointOnPlane = _CamFarCenter;
+}
+
+// http://www.iquilezles.org/www/articles/frustumcorrect/frustumcorrect.htm
+inline bool ShouldFrustumCull(BoundingBox box)
+{
+	if (SHOULD_FRUSTUM_CULL == false)
+	{
+		return false;
+	}
+
+	// Calculate the frustum planes
+	FrustumPlane mPlanes[5];
+	CalculateCameraPlanes(mPlanes);
+
+	// check box outside/inside of frustum
+	int result = 0;
+	int i = 0;
+	for(; i < 5; i++)
+	{
+		result = 0;
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.minPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.minPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.maxPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.maxPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.minPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.minPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.maxPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.maxPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		
+		// If the object is completely outside of that plane...
+		if (result == 8)
+		{
+			// We break and do a shadow check...
+			break;
+		}
+	}
+
+	// check frustum outside/inside box
+	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].x > box.max.x)?1:0); if( result==8 ) return false;
+	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].x < box.min.x)?1:0); if( result==8 ) return false;
+	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].y > box.max.y)?1:0); if( result==8 ) return false;
+	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].y < box.min.y)?1:0); if( result==8 ) return false;
+	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].z > box.max.z)?1:0); if( result==8 ) return false;
+	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].z < box.min.z)?1:0); if( result==8 ) return false;
+
+	// if (SHOULD_SHADOW_CULL == false)
+	// {
+
+	// }
+
+	// Shadow Culling
+	// Move the planes facing away from the light direction, towards the light so we can get objects adding shadows to our frustum
+	float3 shadowCullingOffset = -(_LightDirection * _ShadowCullingLength);
+	mPlanes[0].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[0].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
+	mPlanes[1].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[1].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
+	mPlanes[2].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[2].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
+	mPlanes[3].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[3].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
+	mPlanes[4].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[4].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
+	// mPlanes[5].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[5].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
+
+	i = 0;
+	for(; i < 5; i++)
+	{
+		result = 0;
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.minPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.minPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.maxPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.maxPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.minPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.minPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.maxPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.maxPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		
+		if (result==8)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Assign LOD Level
+inline void AssignLod(ComputeShaderInputData instance, float camDist)
+{
+	if (SHOULD_LOD == false)
+	{
+		lod02PositionsBuffer.Append(instance.position);
+	}
+	else if (camDist < instance.lod00Range)
+	{
+		lod00PositionsBuffer.Append(instance.position);
+	}
+	else if (camDist < instance.lod01Range)
+	{
+		lod01PositionsBuffer.Append(instance.position);
+	}
+	else if (camDist < instance.lod02Range)
+	{
+		lod02PositionsBuffer.Append(instance.position);
+	}
+}
+
+
+[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
+inline void CSMain (
+		uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
+		uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
+		uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount (The variable I am looking for)
+		uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
+	)        
 {
     // Calculate the instance index
-	uint index = id.x + id.y + id.z;
+	uint index = _dispatchThreadID.x;
+
+	if (index > _NumberOfInstances)
+	{
+		return;
+	}
+
+	ComputeShaderInputData instance = positionBuffer[index];
+
+	// Early out check: If the position is further than our lowest LOD level
+	float camDist = abs(distance(instance.position.xyz, _CamPos));
+	float camFarPlaneDist = abs(distance(instance.position.xyz, _CamPos));
 	
-    // Calculate the min and max positions of the instance bounds
-	float4 pos = positionBuffer[index];
-    float4 clipmin;
-    float4 clipmax;
-    CalculateClipMinAndMax(pos, clipmin, clipmax);
-    
-    // Culling
-    if (ShouldFrustumCull(clipmin, clipmax))
-    {
-        return;
-    }
-    
-    if (ShouldHiZCull(clipmin, clipmax))
-    {
-        return;
-    }
-    
-    // LOD
-    AssignLod(pos, clipmin);
+	if (camDist >= instance.lod02Range)
+	{
+		return;
+	}
+	
+	
+	if (camDist < ALWAYS_DRAW_RANGE)
+	{
+		AssignLod(instance, camDist);
+	}
+	else
+	{
+		// Get the bounding box corners
+		BoundingBox boundingBox;
+		GetBoxCorners(instance.position.xyz + instance.boundsCenter, instance.position.w * instance.boundsExtents, boundingBox);
+
+		// Frustum Culling & Shadow culling
+		if (ShouldFrustumCull(boundingBox))
+		{
+			return;
+		}
+
+		// Calculate the min and max positions of the instance bounds
+		float3 clipmin;
+		float3 clipmax;
+		CalculateClipMinAndMax(boundingBox, instance.position, clipmin, clipmax);
+
+		// Occlusion Culling
+		if (ShouldHiZCull(clipmin, clipmax))
+		{
+			return;
+		}
+		
+		// LOD
+		AssignLod(instance, camDist);
+	}
 }
