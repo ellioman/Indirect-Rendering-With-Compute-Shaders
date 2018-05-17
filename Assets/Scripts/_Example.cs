@@ -31,4 +31,9 @@ public class _Example : MonoBehaviour
 			}
 		}
 	}
+
+	private void OnGUI()
+	{
+		GUI.Label(new Rect(5f, 5f, 1000f, 200f), "Hold mouse button down and WASD to move camera");
+	}
 }
