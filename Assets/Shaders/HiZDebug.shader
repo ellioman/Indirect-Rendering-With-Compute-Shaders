@@ -47,7 +47,7 @@ SamplerState sampler_CameraDepthTexture;
     float4 fragment(in Varyings input) : SV_Target
     {
         //return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, input.uv).r;
-        return _MainTex.SampleLevel(sampler_MainTex, input.uv, _LOD).r * 100.0;
+        return _MainTex.SampleLevel(sampler_MainTex, input.uv, _LOD).g * 100.0;
         
         //float2 rg = _MainTex.SampleLevel(sampler_MainTex, input.uv, _LOD).rg;
         //return lerp(float4(rg.r, 0., 0., 1.), float4(0., rg.g, 0., 1.), step(.5, input.uv.x));

@@ -8,26 +8,29 @@ using System.Collections.Generic;
 public class HiZOcclusionBufferGenerate : MonoBehaviour
 {
     #region Variables
-
+// public Renderer[] test;
+public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
     // Unity Editor Variables
     [Header("References")]
+    public Vector2 textureSize;
     [SerializeField] private Shader m_generateBufferShader = null;
     [SerializeField] private Shader m_debugShader = null;
     public IndirectRenderer hiZController;
     // Private 
     private int m_LODCount = 0;
     private int[] m_Temporaries = null;
-    private Camera m_camera = null;
+    public Camera m_camera = null;
     private Material m_generateBufferMaterial = null;
     private Material m_debugMaterial = null;
     private RenderTexture m_HiZDepthTexture = null;
+    // private RenderTexture m_HiZDepthTexture2 = null;
     private CommandBuffer m_CommandBuffer = null;
-    private CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
     
+
     // Public Properties
     public int DebugLodLevel { get; set; }
     public bool DebugModeEnabled { get; set; }
-    public Vector2 TextureSize { get; private set; }
+    
     public RenderTexture HiZDepthTexture { get { return m_HiZDepthTexture; } }
     
     // Consts
@@ -49,8 +52,15 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
         m_generateBufferMaterial = new Material(m_generateBufferShader);
         m_debugMaterial = new Material(m_debugShader);
 
-        m_camera = GetComponent<Camera>();
+        // GameObject camObj = new GameObject("CCC");
+        // camObj.transform.parent = transform;
+        // m_camera = camObj.AddComponent<Camera>();
+        // m_camera.CopyFrom(GetComponent<Camera>());
         m_camera.depthTextureMode = DepthTextureMode.Depth;
+        // m_camera.cullingMask = 8;
+        // m_camera.targetTexture = m_HiZDepthTexture;
+        // m_camera = GetComponent<Camera>();
+        // m_camera.depthTextureMode = DepthTextureMode.Depth;
     }
 
     private void OnDisable()
@@ -78,8 +88,8 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
     
     private void Update()
     {
-        TextureSize = new Vector2(Mathf.NextPowerOfTwo(m_camera.pixelWidth), Mathf.NextPowerOfTwo(m_camera.pixelHeight));
-        m_LODCount = (int) Mathf.Floor(Mathf.Log(TextureSize.x, 2f));
+        textureSize = new Vector2(Mathf.NextPowerOfTwo(m_camera.pixelWidth), Mathf.NextPowerOfTwo(m_camera.pixelHeight));
+        m_LODCount = (int) Mathf.Floor(Mathf.Log(textureSize.x, 2f));
         
         bool isCommandBufferInvalid = false;
         if (m_LODCount == 0)
@@ -87,23 +97,35 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
             return;
         }
 
-        if (m_HiZDepthTexture == null || (m_HiZDepthTexture.width != (int) TextureSize.x || m_HiZDepthTexture.height != (int) TextureSize.y))
+        if (m_HiZDepthTexture == null || (m_HiZDepthTexture.width != (int) textureSize.x || m_HiZDepthTexture.height != (int) textureSize.y))
         {
             if (m_HiZDepthTexture != null)
             {
                 m_HiZDepthTexture.Release();
             }
 
-            m_HiZDepthTexture = new RenderTexture((int)TextureSize.x, (int) TextureSize.y, 0, RenderTextureFormat.RGFloat, RenderTextureReadWrite.Linear);
+            m_HiZDepthTexture = new RenderTexture((int)textureSize.x, (int) textureSize.y, 0, RenderTextureFormat.RGFloat, RenderTextureReadWrite.Linear);
             m_HiZDepthTexture.filterMode = FilterMode.Point;
-
             m_HiZDepthTexture.useMipMap = true;
             m_HiZDepthTexture.autoGenerateMips = false;
-
             m_HiZDepthTexture.Create();
-
             m_HiZDepthTexture.hideFlags = HideFlags.HideAndDontSave;
+
+            // if (m_HiZDepthTexture2 != null)
+            // {
+            //     m_HiZDepthTexture2.Release();
+            // }
+
+            // m_HiZDepthTexture2 = new RenderTexture((int)textureSize.x, (int) textureSize.y, 0, RenderTextureFormat.RGFloat, RenderTextureReadWrite.Linear);
+            // m_HiZDepthTexture2.filterMode = FilterMode.Point;
+            // m_HiZDepthTexture2.useMipMap = true;
+            // m_HiZDepthTexture2.autoGenerateMips = false;
+            // m_HiZDepthTexture2.Create();
+            // m_HiZDepthTexture2.hideFlags = HideFlags.HideAndDontSave;
+
             isCommandBufferInvalid = true;
+
+            // m_camera.targetTexture = m_HiZDepthTexture;
         }
         
         if (m_CommandBuffer == null || isCommandBufferInvalid == true)
@@ -121,18 +143,22 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
             // m_CommandBuffer.DrawMeshInstancedIndirect(hiZController.m_boundingBoxMesh, 0, hiZController.m_allMaterial, 0, hiZController.m_allArgsBuffer,0, null);
 
             RenderTargetIdentifier id = new RenderTargetIdentifier(m_HiZDepthTexture);
+            
             m_CommandBuffer.SetRenderTarget(m_HiZDepthTexture);
             
-            m_CommandBuffer.Blit(null, id, m_generateBufferMaterial, (int) Pass.Blit);
+            m_CommandBuffer.ClearRandomWriteTargets();
+            m_CommandBuffer.ClearRenderTarget(true, true, Color.black, 0f);
 
+             m_CommandBuffer.Blit(null, id, m_generateBufferMaterial, (int) Pass.Blit);
+            
 
             for (int i = 0; i < m_LODCount; ++i)
             {
                 m_Temporaries[i] = Shader.PropertyToID("_09659d57_Temporaries" + i.ToString());
 
-                int width = ((int) TextureSize.x);
+                int width = ((int) textureSize.x);
                 width = width >>= 1;
-                int height = ((int) TextureSize.y);
+                int height = ((int) textureSize.y);
                 height = height >>= 1;
 
                 if (width == 0)
@@ -144,7 +170,7 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
                 {
                     height = 1;
                 }
-                TextureSize = new Vector2(width, height);
+                textureSize = new Vector2(width, height);
 
                 m_CommandBuffer.GetTemporaryRT(m_Temporaries[i], width, height, 0, FilterMode.Point, RenderTextureFormat.RGFloat, RenderTextureReadWrite.Linear);
                 
@@ -166,7 +192,7 @@ public class HiZOcclusionBufferGenerate : MonoBehaviour
             }
 
             m_CommandBuffer.ReleaseTemporaryRT(m_Temporaries[m_LODCount - 1]);
-            // m_CommandBuffer.ClearRenderTarget(true, true, Color.cyan);
+            // m_CommandBuffer.CopyTexture(m_HiZDepthTexture, m_HiZDepthTexture2);
             
             m_camera.AddCommandBuffer(m_CameraEvent, m_CommandBuffer);
         }

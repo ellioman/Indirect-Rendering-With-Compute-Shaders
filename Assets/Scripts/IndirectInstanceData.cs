@@ -11,7 +11,9 @@ public class IndirectInstanceData
 	public Material lod00Material;
 	public Material lod01Material;
 	public Material lod02Material;
-	public Vector4[] positions;
+	public Vector3[] rotations;
+	public Vector3[] positions;
+	public float[] uniformScales;
 	public float lod00Range;
 	public float lod01Range;
 	public float lod02Range;

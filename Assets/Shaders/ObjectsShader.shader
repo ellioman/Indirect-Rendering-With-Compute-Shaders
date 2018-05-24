@@ -16,6 +16,7 @@ Shader "HiZ/Objects"
         _NoiseScale("Noise Scale", Range(-2,2)) = 1
         _TopSpread("TopSpread", Range(-2,2)) = 1
         _EdgeWidth("EdgeWidth", Range(0,0.5)) = 1
+			_Test("_TEST", Range(0,360)) = 1
 	}
 	SubShader
 	{
@@ -27,6 +28,7 @@ Shader "HiZ/Objects"
 		#pragma surface surf Standard addshadow
         #pragma multi_compile_instancing
         #pragma instancing_options procedural:setup
+		 #pragma instancing_options assumeuniformscaling
 
 		#if SHADER_TARGET >= 35 && (defined(SHADER_API_D3D11) || defined(SHADER_API_GLES3) || defined(SHADER_API_GLCORE) || defined(SHADER_API_XBOXONE) || defined(SHADER_API_PSSL) || defined(SHADER_API_SWITCH) || defined(SHADER_API_VULKAN) || (defined(SHADER_API_METAL) && defined(UNITY_COMPILER_HLSLCC)))
             #define SUPPORT_STRUCTUREDBUFFER
@@ -48,6 +50,8 @@ Shader "HiZ/Objects"
 		uniform sampler2D _MainTex;
 		uniform sampler2D _MainTexSide;
 		uniform sampler2D _NormalMap;
+		float _Test;
+		
 
 		struct Input
 		{
@@ -59,9 +63,62 @@ Shader "HiZ/Objects"
 		};
 
 		#if defined(ENABLE_INSTANCING)
-			StructuredBuffer<float4> positionBuffer;
+		struct OutputData
+		{
+			float3 position;// 3
+			float3 rotation;// 6
+			float uniformScale;	// 7
+			float unused;	// 8
+		};
+
+			StructuredBuffer<OutputData> positionBuffer;
 		#endif
 		
+		float4x4 rotationMatrix(float3 axis, float angle)
+		{
+			axis = normalize(axis);
+			float s = sin(angle);
+			float c = cos(angle);
+			float oc = 1.0 - c;
+
+			return float4x4(
+				oc * axis.x * axis.x + c, oc * axis.x * axis.y - axis.z * s, oc * axis.z * axis.x + axis.y * s, 0.0,
+				oc * axis.x * axis.y + axis.z * s, oc * axis.y * axis.y + c, oc * axis.y * axis.z - axis.x * s, 0.0,
+				oc * axis.z * axis.x - axis.y * s, oc * axis.y * axis.z + axis.x * s, oc * axis.z * axis.z + c, 0.0,
+				0, 0, 0,          1.0);
+		}
+
+		// https://forum.unity.com/threads/incorrect-normals-on-after-rotating-instances-graphics-drawmeshinstancedindirect.503232/#post-3277479
+		float4x4 inverse(float4x4 input)
+		{
+			#define minor(a,b,c) determinant(float3x3(input.a, input.b, input.c))
+			
+				float4x4 cofactors = float4x4(
+					minor(_22_23_24, _32_33_34, _42_43_44),
+					-minor(_21_23_24, _31_33_34, _41_43_44),
+					minor(_21_22_24, _31_32_34, _41_42_44),
+					-minor(_21_22_23, _31_32_33, _41_42_43),
+			
+					-minor(_12_13_14, _32_33_34, _42_43_44),
+					minor(_11_13_14, _31_33_34, _41_43_44),
+					-minor(_11_12_14, _31_32_34, _41_42_44),
+					minor(_11_12_13, _31_32_33, _41_42_43),
+			
+					minor(_12_13_14, _22_23_24, _42_43_44),
+					-minor(_11_13_14, _21_23_24, _41_43_44),
+					minor(_11_12_14, _21_22_24, _41_42_44),
+					-minor(_11_12_13, _21_22_23, _41_42_43),
+			
+					-minor(_12_13_14, _22_23_24, _32_33_34),
+					minor(_11_13_14, _21_23_24, _31_33_34),
+					-minor(_11_12_14, _21_22_24, _31_32_34),
+					minor(_11_12_13, _21_22_23, _31_32_33)
+					);
+			#undef minor
+				return transpose(cofactors) / determinant(input);
+		}
+
+
 		void setup()
 		{
 			// Positions are calculated in the compute shader.
@@ -69,17 +126,24 @@ Shader "HiZ/Objects"
 			#if defined(ENABLE_INSTANCING)
 				
 				uint index = unity_InstanceID;
-				float4 position = positionBuffer[index];
-				float scale = position.w;
+				OutputData instance = positionBuffer[index];
+				float3 position = instance.position;
+				float scale = instance.uniformScale;
 
-				unity_ObjectToWorld._11_21_31_41 = float4(scale, 0, 0, 0);
-				unity_ObjectToWorld._12_22_32_42 = float4(0, scale, 0, 0);
-				unity_ObjectToWorld._13_23_33_43 = float4(0, 0, scale, 0);
-				unity_ObjectToWorld._14_24_34_44 = float4(position.xyz, 1);
+				float4x4 xRotationMatrix = rotationMatrix(float3(1, 0, 0), radians(instance.rotation.x));
+				float4x4 yRotationMatrix = rotationMatrix(float3(0, 1, 0), radians(instance.rotation.y));
+				float4x4 zRotationMatrix = rotationMatrix(float3(0, 0, 1), radians(instance.rotation.z));
+				float4x4 rotMatrix = mul(zRotationMatrix, mul(yRotationMatrix, xRotationMatrix));
 
-				unity_WorldToObject = unity_ObjectToWorld;
-				unity_WorldToObject._14_24_34 *= -1;
-				unity_WorldToObject._11_22_33 = 1.0f / unity_WorldToObject._11_22_33;
+				float4x4 translation = {
+					scale, 0, 0, position.x,
+					0, scale, 0, position.y,
+					0, 0, scale, position.z,
+					0, 0, 0, 1
+				};
+
+				unity_ObjectToWorld = mul(translation, rotMatrix);
+				unity_WorldToObject = inverse(unity_ObjectToWorld);
 			#endif
 		}
 
@@ -99,56 +163,7 @@ Shader "HiZ/Objects"
 			// o.Smoothness = _Glossiness;
 			// o.Alpha = 1.0;
 
-			// clamp (saturate) and increase(pow) the worldnormal value to use as a blend between the projected textures
-			float3 blendNormal = saturate(pow(IN.worldNormal * 1.4,4));
-
-			// normal noise triplanar for x, y, z sides
-			float3 xn = tex2D(_NormalMap, IN.worldPos.zy * _NoiseScale);
-			float3 yn = tex2D(_NormalMap, IN.worldPos.zx * _NoiseScale);
-			float3 zn = tex2D(_NormalMap, IN.worldPos.xy * _NoiseScale);
-
-			// lerped together all sides for noise texture
-			float3 noisetexture = zn;
-			noisetexture = lerp(noisetexture, xn, blendNormal.x);
-			noisetexture = lerp(noisetexture, yn, blendNormal.y);
-
-			// triplanar for top texture for x, y, z sides
-			float3 xm = tex2D(_MainTex, IN.worldPos.zy * _Scale);
-			float3 zm = tex2D(_MainTex, IN.worldPos.xy * _Scale);
-			float3 ym = tex2D(_MainTex, IN.worldPos.zx * _Scale);
-
-			// lerped together all sides for top texture
-			float3 toptexture = zm;
-			toptexture = lerp(toptexture, xm, blendNormal.x);
-			toptexture = lerp(toptexture, ym, blendNormal.y);
-
-			// triplanar for side and bottom texture, x,y,z sides
-			float3 x = tex2D(_MainTexSide, IN.worldPos.zy * _SideScale);
-			float3 y = tex2D(_MainTexSide, IN.worldPos.zx * _SideScale);
-			float3 z = tex2D(_MainTexSide, IN.worldPos.xy * _SideScale);
-
-			// lerped together all sides for side bottom texture
-			float3 sidetexture = z;
-			sidetexture = lerp(sidetexture, x, blendNormal.x);
-			sidetexture = lerp(sidetexture, y, blendNormal.y);
-
-			// dot product of world normal and surface normal + noise
-			float worldNormalDotNoise = dot(o.Normal + (noisetexture.y + (noisetexture * 0.5)), IN.worldNormal.y);
-
-			// if dot product is higher than the top spread slider, multiplied by triplanar mapped top texture
-			// step is replacing an if statement to avoid branching :
-			// if (worldNormalDotNoise > _TopSpread{ o.Albedo = toptexture}
-			float3 topTextureResult = step(_TopSpread, worldNormalDotNoise) * toptexture;
-
-			// if dot product is lower than the top spread slider, multiplied by triplanar mapped side/bottom texture
-			float3 sideTextureResult = step(worldNormalDotNoise, _TopSpread) * sidetexture;
-
-			// if dot product is in between the two, make the texture darker
-			float3 topTextureEdgeResult = step(_TopSpread, worldNormalDotNoise) * step(worldNormalDotNoise, _TopSpread + _EdgeWidth) *  -0.15;
-
-			// final albedo color
-			o.Albedo = topTextureResult + sideTextureResult + topTextureEdgeResult;
-			o.Albedo *= _Color;
+			o.Albedo = _Color;
 		}
 	ENDCG
 	}

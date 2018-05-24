@@ -4,6 +4,7 @@ using System.Collections.Generic;
 
 public partial class IndirectRenderer : MonoBehaviour
 {
+    public float _TestVal;
     #region Variables
     
     [Header("Settings")]
@@ -35,6 +36,8 @@ public partial class IndirectRenderer : MonoBehaviour
 
     private void Update()
     {
+        //Debug.Log(SystemInfo.usesReversedZBuffer);
+        
         if (m_shouldDraw == false
             || m_renderers == null
             || m_renderers.Count == 0
@@ -82,10 +85,10 @@ public partial class IndirectRenderer : MonoBehaviour
         // Update Compute();
         CalculateCameraFrustumPlanes();
 
-        // Matrix4x4 M = m_camera.transform.localToWorldMatrix;
+        Matrix4x4 M = Matrix4x4.identity;//m_camera.transform.matr;
         Matrix4x4 V = m_camera.worldToCameraMatrix;
         Matrix4x4 P = m_camera.projectionMatrix;
-        Matrix4x4 MVP = P * V;//*M;
+        Matrix4x4 MVP = P * V * M;
 
         // Global data
         m_drawBounds.center = m_camera.transform.position;
@@ -93,7 +96,7 @@ public partial class IndirectRenderer : MonoBehaviour
 
         for (int i = 0; i < m_renderers.Count; i++)
         {
-            m_renderers[i].Draw(m_hiZBuffer, MVP, m_camera.transform.position, m_light.transform.forward, m_shadowCullingLength, m_drawBounds, m_shadowCastingMode);
+            m_renderers[i].Draw(m_hiZBuffer, MVP, m_camera.transform.position, m_light.transform.forward, m_shadowCullingLength, m_drawBounds, m_shadowCastingMode, true, _TestVal);
         }
     }
 
@@ -119,11 +122,6 @@ public partial class IndirectRenderer : MonoBehaviour
     public void AddInstances(List<IndirectInstanceData> _instances)
     {
         m_instances.AddRange(_instances);
-    }
-
-    public void ClearData()
-    {
-        Clear();
     }
 
     public void StartDrawing()

@@ -13,6 +13,8 @@ struct Varyings
 {
     float4 vertex : SV_POSITION;
     float2 uv : TEXCOORD0;
+    float2 depth : TEXCOORD1;
+    float4 scrPos : TEXCOORD2;
 };
 
 Texture2D _MainTex;
@@ -20,6 +22,7 @@ SamplerState sampler_MainTex;
 
 Texture2D _CameraDepthTexture;
 SamplerState sampler_CameraDepthTexture;
+// sampler2D _CameraDepthTexture;
 
 float4 _MainTex_TexelSize;
 
@@ -30,19 +33,26 @@ Varyings vertex(in Input input)
     output.vertex = UnityObjectToClipPos(input.vertex.xyz);
     output.uv = input.uv;
 
-    #if UNITY_UV_STARTS_AT_TOP
-        if (_MainTex_TexelSize.y < 0)
-        {
-            output.uv.y = 1. - input.uv.y;
-        }
-    #endif
+    UNITY_TRANSFER_DEPTH(output.depth);
+    output.scrPos=ComputeScreenPos(output.vertex);
+
+    //for some reason, the y position of the depth texture comes out inverted
+    // output.scrPos.y = 1 - output.scrPos.y;
+
+    // #if UNITY_UV_STARTS_AT_TOP
+    //     if (_MainTex_TexelSize.y < 0)
+    //     {
+    //         output.uv.y = 1. - input.uv.y;
+    //     }
+    // #endif
 
     return output;
 }
 
 float4 blit(in Varyings input) : SV_Target
 {
-    return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, input.uv).r;
+    const float MULTIPLIER = 1.8; // TODO: Find out why the hell I need this multiplier!
+    return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, input.uv).r * MULTIPLIER; 
 }
 
 float4 reduce(in Varyings input) : SV_Target
@@ -61,9 +71,10 @@ float4 reduce(in Varyings input) : SV_Target
         float4 g = _MainTex.GatherGreen(sampler_MainTex, input.uv);
     #endif
     
-        float minimum = min(min(min(r.x, r.y), r.z), r.w);
-        float maximum = max(max(max(g.x, g.y), g.z), g.w);
-        return float4(minimum, maximum, 1.0, 1.0);
+
+    float minimum = min(min(min(r.x, r.y), r.z), r.w);
+    float maximum = max(max(max(g.x, g.y), g.z), g.w);
+    return float4(minimum, maximum, 1.0, 1.0);
 }
 
 #endif

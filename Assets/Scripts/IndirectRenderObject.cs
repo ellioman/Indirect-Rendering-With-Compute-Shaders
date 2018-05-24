@@ -8,16 +8,23 @@ using Random = UnityEngine.Random;
 [System.Serializable]
 public struct ComputeShaderInputData
 {
-    public float numOfInstances;	// 1
-    public Vector4 position; 		// 5
-    public Vector3 boundsCenter;	// 8
-    public Vector3 boundsExtents;	// 11
-    public float lod00Range; 		// 12
-    public float lod01Range; 		// 13
-    public float lod02Range; 		// 14
-    public float unused1; 			// 15
-    public float unused2;			// 16
+    public Vector3 position;        // 3
+    public Vector3 rotation;        // 6
+    public float uniformScale;      // 7
+    public Vector3 boundsCenter;    // 10
+    public Vector3 boundsExtents;   // 13
+    public float lod00Range;       // 14
+    public float lod01Range;       // 15
+    public float lod02Range;       // 16
 }
+
+public struct ComputeShaderOutputData
+{
+    Vector3 position;// 3
+    Vector3 rotation;// 6
+    float uniformScale;    // 7
+    float unused;	// 8
+};
 
 [Serializable]
 public class IndirectRenderObject
@@ -47,8 +54,11 @@ public class IndirectRenderObject
 	private int m_kernelId;
 	private Vector3Int threadGroupSize = new Vector3Int();
 	private int m_computeShaderNumOfInstances = 0;
+
+	// Constants
 	private const int NUM_OF_ARGS_PER_INSTANCE = 5;
 	private const int COMPUTE_SHADER_INPUT_BYTE_SIZE = 16 * sizeof(float);
+    private const int COMPUTE_SHADER_OUTPUT_BYTE_SIZE = 8 * sizeof(float);
 
 
 	public void Initialize(ComputeShader _computeShader, IndirectInstanceData _data)// ComputeBuffer _argsBuffer, ComputeBuffer _positionBuffer, ComputeBuffer indexOffsetBuffer, int id)
@@ -94,7 +104,7 @@ public class IndirectRenderObject
 		m_computeShader.SetFloat("_ShadowCullingLength", _shadowCullingLength);
 		m_computeShader.SetInt("_NumberOfInstances", m_numOfInstances);
         m_computeShader.SetMatrix("_UNITY_MATRIX_MVP", _MVP);
-        m_computeShader.SetVector("_HiZTextureSize", _hiZBuffer.TextureSize);
+        m_computeShader.SetVector("_HiZTextureSize", _hiZBuffer.textureSize);
         m_computeShader.SetVector("_CamPos", _cameraPosition);
         m_computeShader.SetVector("_LightDirection", _lightDirection);
 		m_computeShader.SetBuffer(m_kernelId, "positionBuffer", m_positionsBuffer);
@@ -122,8 +132,9 @@ public class IndirectRenderObject
 		// Debug.Log(m_lod00Args[1] + " vs. " + m_lod01Args[1] + " vs. " + m_lod02Args[1]);
 	}
 
-    public void Draw(HiZOcclusionBufferGenerate _hiZBuffer, Matrix4x4 _MVP, Vector3 _cameraPosition, Vector3 _lightDirection, float _shadowCullingLength, Bounds drawBounds, ShadowCastingMode shadowCastingMode, bool receiveShadows = true)
+    public void Draw(HiZOcclusionBufferGenerate _hiZBuffer, Matrix4x4 _MVP, Vector3 _cameraPosition, Vector3 _lightDirection, float _shadowCullingLength, Bounds drawBounds, ShadowCastingMode shadowCastingMode, bool receiveShadows = true, float _test = 0)
 	{
+		m_computeShader.SetFloat("_Test", _test);
 		// Compute visible objects
 		RunCompute(_hiZBuffer, _MVP, _cameraPosition, _lightDirection, _shadowCullingLength);
 
@@ -163,29 +174,28 @@ public class IndirectRenderObject
 			ComputeShaderInputData newData = new ComputeShaderInputData();
             m_computeShaderNumOfInstances = Mathf.ClosestPowerOfTwo(m_numOfInstances);
             
-			newData.position = new Vector4(
-				_data.positions[i].x,
-				_data.positions[i].y,
-				_data.positions[i].z,
-				_data.positions[i].w
-			);
-			newData.boundsCenter = _data.lod00Mesh.bounds.center;
-			newData.boundsExtents = _data.lod00Mesh.bounds.extents;
-			newData.numOfInstances = m_numOfInstances;
+			Bounds b = new Bounds();
+			b.Encapsulate(_data.lod00Mesh.bounds);
+			b.Encapsulate(_data.lod01Mesh.bounds);
+			b.Encapsulate(_data.lod02Mesh.bounds);
+			b.extents *= _data.uniformScales[i];
+			// Debug.Log(b);
+
+			newData.position = _data.positions[i];
+			newData.rotation = _data.rotations[i];
+			newData.uniformScale = _data.uniformScales[i];
+			newData.boundsCenter = _data.positions[i];//_data.lod00Mesh.bounds.center;
+			newData.boundsExtents = b.extents;//_data.lod00Mesh.bounds.extents;
 			newData.lod00Range = _data.lod00Range;
 			newData.lod01Range = _data.lod01Range;
 			newData.lod02Range = _data.lod02Range;
-			newData.unused1 = 0f;
-			newData.unused2 = 0f;
 			ComputeShaderInputData[i] = newData;
         }
         m_positionsBuffer.SetData(ComputeShaderInputData);
-        
-        //Debug.Log("m_positionsBuffer.stride: " + m_positionsBuffer.stride);
 
-		m_lod00PositionsBuffer = new ComputeBuffer(m_numOfInstances, 16, ComputeBufferType.Append);
-		m_lod01PositionsBuffer = new ComputeBuffer(m_numOfInstances, 16, ComputeBufferType.Append);
-		m_lod02PositionsBuffer = new ComputeBuffer(m_numOfInstances, 16, ComputeBufferType.Append);
+		m_lod00PositionsBuffer = new ComputeBuffer(m_numOfInstances, COMPUTE_SHADER_OUTPUT_BYTE_SIZE, ComputeBufferType.Append);
+		m_lod01PositionsBuffer = new ComputeBuffer(m_numOfInstances, COMPUTE_SHADER_OUTPUT_BYTE_SIZE, ComputeBufferType.Append);
+		m_lod02PositionsBuffer = new ComputeBuffer(m_numOfInstances, COMPUTE_SHADER_OUTPUT_BYTE_SIZE, ComputeBufferType.Append);
 
 		m_lod00PositionsBuffer.SetCounterValue(0);
 		m_lod01PositionsBuffer.SetCounterValue(0);
