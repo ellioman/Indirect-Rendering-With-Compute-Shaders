@@ -1,8 +1,8 @@
-#Indirect-Rendering-With-Compute-Shaders
+# Indirect-Rendering-With-Compute-Shaders
 
 An example of drawing numerous instances in Unity3D using Graphics.DrawMeshInstancedIndirect.
 
-##Features
+## Features
 
 - Use compute buffers and compute shaders
 - Draw things using Graphics.DrawMeshInstancedIndirect
@@ -12,14 +12,14 @@ An example of drawing numerous instances in Unity3D using Graphics.DrawMeshInsta
 - LOD objects by distance in a compute shader
 
 
-##TODO
+## TODO
 - Implement Kostas approach:
 	- Dispatch the compute shader only once for all instances
 	- Implement Stream-Compaction
 	- Batch LOD meshes in to large buffers
 - Try out Raster Occlusion instead of Hi-Z (See "NVidia Siggraph 2014" & "Github - nvpro-samples" below)
 
-##Useful links
+## Useful links
 
 [Sakib Saikia - Going Indirect on UE3](https://sakibsaikia.github.io/graphics/2017/08/18/Going-Indirect-On-UE3.html)
 
