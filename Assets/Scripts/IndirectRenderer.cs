@@ -352,7 +352,6 @@ public partial class IndirectRenderer : MonoBehaviour
 		Profiler.BeginSample("04 Copy Instance Data");
 		{
 			// Input
-			m_04_copyInstanceDataCS.SetInt("_NumberOfInstances", m_numberOfInstances);
 			m_04_copyInstanceDataCS.SetBuffer(m_04_copyInstanceDataKernelID, "instanceDataIn", m_positionsBuffer);
 			m_04_copyInstanceDataCS.SetBuffer(m_04_copyInstanceDataKernelID, "instancePredicatesIn", m_isVisibleBuffer);
 			m_04_copyInstanceDataCS.SetBuffer(m_04_copyInstanceDataKernelID, "groupSumArray", m_scannedGroupSumBuffer);

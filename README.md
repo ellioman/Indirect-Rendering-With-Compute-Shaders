@@ -10,20 +10,26 @@ An example of drawing numerous instances in Unity3D using Compute shaders and Gr
 - Frustum culling in a compute shader
 - Occlusion culling with HierarchicalZBuffer in a compute shader
 - Extending camera frustum towards light to include shadow casting objects
-- LOD objects by distance in a compute shader
+- LOD objects using the distance from camera to object
 
+##Project Setup
+- "_Example.cs" script on the "Example" game object:
+	- Creates the instance data and sends it to the Indirect Renderer class.
+- "IndirectRenderer.cs" on the "MainCamera" game object:
+	- Is the main class in the project. It initializes all the buffers and compute shaders and then dispatches the compute shaders and draws the objects when Unity calls the PreCull() function.
+- "HiZBuffer.cs" script on the "OccluderCamera" game object:
+	- Creates a hierarchial Z-Buffer texture that is used when doing occlusion culling.
 
 ## TODO
 - Improve the instance sorting:
 	- On my Macbook pro (mid 2014) sorting takes approx 50% of the GPU time
-	- The sorting must that support instance counts not in the non power of two (right now I'm padding the data to become POT)
-- Try to make the buffers smaller. Ex: Use only one uint for bounds size by bit shifting.
+	- The GPU sorting must support instance numbers that are not in the non power of two (right now I'm padding the data to become POT)
+	- Find a better performant approach for the CPU Sorting
+- Try to make the compute buffers smaller in size. Ex: Pack the three floats, used for bounds size, into one uint.
 - Try out Raster Occlusion instead of Hi-Z (See "NVidia Siggraph 2014" & "Github - nvpro-samples" below)
 
 
-
-
-## Useful links
+## Resources
 
 [Kostas Anagnostou - GPU Driven Rendering Experiments](http://bit.ly/Kostas-GPUDrivenRenderingExperiments)
 

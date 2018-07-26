@@ -25,7 +25,6 @@ struct OutputData
 };
 
 // Input
-uniform uint _NumberOfInstances;
 StructuredBuffer<ComputeShaderInputData> instanceDataIn;
 Buffer<uint> instancePredicatesIn;
 Buffer<uint> groupSumArray;

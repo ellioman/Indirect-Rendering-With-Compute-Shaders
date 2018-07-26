@@ -10,6 +10,10 @@
 #define SHOULD_OCCLUSION_CULL 1
 #define SHOULD_LOD 1
 
+#define LOD00_RANGE 500
+#define LOD01_RANGE 1500
+
+
 // Structs
 struct FrustumPlane
 {
@@ -37,13 +41,6 @@ struct ComputeShaderInputData
 };
 
 // Input
-RWStructuredBuffer<ComputeShaderInputData> positionBuffer;
-
-// Output
-RWStructuredBuffer<uint> argsBuffer;
-RWStructuredBuffer<uint> _IsVisibleBuffer;
-
-
 uniform float _ShadowCullingLength;
 uniform float3 _LightDirection;
 uniform float4x4 _UNITY_MATRIX_MVP;
@@ -52,7 +49,13 @@ uniform float3 _CamNearCenter;
 uniform float3 _CamFarCenter;
 uniform Texture2D<float4> _HiZMap;
 uniform SamplerState sampler_HiZMap; // "sampler" + “_HiZMap”
-uniform float _Test;
+RWStructuredBuffer<ComputeShaderInputData> positionBuffer;
+
+// Output
+RWStructuredBuffer<uint> argsBuffer;
+RWStructuredBuffer<uint> _IsVisibleBuffer;
+
+
 
 inline bool AreDirectionsFacingEachother(float3 dir1, float3 dir2)
 {
@@ -152,16 +155,6 @@ inline bool ShouldHiZCull(float3 position, BoundingBox boundingBox)
         yPos += stepY;	
     }
 	return clipmin.z < HIZdepth;
-	
-	// Debug...
-	// HIZdepth = max(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, float2(clipmin.x, clipmin.y), _Test).g);
-    // return clipmax.z < HIZdepth;
-	// return clipmax.z < _Test;
-	// return clipmin.z < _Test;
-	// return clipmax.y < _Test;
-	// return clipmin.y < _Test;
-	// return clipmax.x < _Test;
-	// return clipmin.x < _Test;
 }
 
 inline void CalculateCameraPlanes(inout FrustumPlane mPlanes[6])
@@ -296,15 +289,17 @@ inline bool ShouldFrustumCull(BoundingBox box)
 	return false;
 }
 
+
+
 // Assign LOD Level
 inline void AssignLod(ComputeShaderInputData instance, float camDist, uint tID)
 {
-	if (camDist < 600)
+	if (camDist < LOD00_RANGE)
 	{
 		InterlockedAdd(argsBuffer[instance.drawCallID + 1], 1);
 		_IsVisibleBuffer[tID] = 1;
 	}
-	else if (camDist < 1200)
+	else if (camDist < LOD01_RANGE)
 	{
 		InterlockedAdd(argsBuffer[instance.drawCallID + 6], 1);
 		_IsVisibleBuffer[tID] = 1;
