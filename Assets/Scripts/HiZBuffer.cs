@@ -5,17 +5,17 @@ using UnityEngine.Rendering;
 using System.Collections.Generic;
 
 [RequireComponent(typeof (Camera))]
-public class HiZOcclusionBufferGenerate : MonoBehaviour
+public class HiZBuffer : MonoBehaviour
 {
     #region Variables
-// public Renderer[] test;
-public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
     // Unity Editor Variables
+    public IndirectRenderer indirectRenderer;
+    public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
     [Header("References")]
     public Vector2 textureSize;
     [SerializeField] private Shader m_generateBufferShader = null;
     [SerializeField] private Shader m_debugShader = null;
-    public IndirectRenderer hiZController;
+
     // Private 
     private int m_LODCount = 0;
     private int[] m_Temporaries = null;
@@ -23,18 +23,16 @@ public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
     private Material m_generateBufferMaterial = null;
     private Material m_debugMaterial = null;
     private RenderTexture m_HiZDepthTexture = null;
-    // private RenderTexture m_HiZDepthTexture2 = null;
     private CommandBuffer m_CommandBuffer = null;
     
 
     // Public Properties
     public int DebugLodLevel { get; set; }
-    public bool DebugModeEnabled { get; set; }
     
     public RenderTexture HiZDepthTexture { get { return m_HiZDepthTexture; } }
     
     // Consts
-    private const int MAXIMUM_BUFFER_SIZE = 512;
+    private const int MAXIMUM_BUFFER_SIZE = 256;
 
     // Enums
     private enum Pass
@@ -47,48 +45,18 @@ public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
 
     #region MonoBehaviour
 
-    private void Start()
+    private void Awake()
     {
         m_generateBufferMaterial = new Material(m_generateBufferShader);
         m_debugMaterial = new Material(m_debugShader);
-
-        // GameObject camObj = new GameObject("CCC");
-        // camObj.transform.parent = transform;
-        // m_camera = camObj.AddComponent<Camera>();
-        // m_camera.CopyFrom(GetComponent<Camera>());
         m_camera.depthTextureMode = DepthTextureMode.Depth;
-        // m_camera.cullingMask = 8;
-        // m_camera.targetTexture = m_HiZDepthTexture;
-        // m_camera = GetComponent<Camera>();
-        // m_camera.depthTextureMode = DepthTextureMode.Depth;
-    }
-
-    private void OnDisable()
-    {
-        Clear();
-    }
-
-    public void Clear()
-    {
-        if (m_camera != null)
-        {
-            if (m_CommandBuffer != null)
-            {
-                m_camera.RemoveCommandBuffer(m_CameraEvent, m_CommandBuffer);
-                m_CommandBuffer = null;
-            }
-        }
-
-        if (m_HiZDepthTexture != null)
-        {
-            m_HiZDepthTexture.Release();
-            m_HiZDepthTexture = null;
-        }
     }
     
-    private void Update()
+    private void OnPreRender()
     {
         textureSize = new Vector2(Mathf.NextPowerOfTwo(m_camera.pixelWidth), Mathf.NextPowerOfTwo(m_camera.pixelHeight));
+        textureSize.x = Mathf.Min(m_camera.pixelWidth, MAXIMUM_BUFFER_SIZE);
+        textureSize.y = Mathf.Min(m_camera.pixelWidth, MAXIMUM_BUFFER_SIZE);
         m_LODCount = (int) Mathf.Floor(Mathf.Log(textureSize.x, 2f));
         
         bool isCommandBufferInvalid = false;
@@ -110,22 +78,7 @@ public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
             m_HiZDepthTexture.autoGenerateMips = false;
             m_HiZDepthTexture.Create();
             m_HiZDepthTexture.hideFlags = HideFlags.HideAndDontSave;
-
-            // if (m_HiZDepthTexture2 != null)
-            // {
-            //     m_HiZDepthTexture2.Release();
-            // }
-
-            // m_HiZDepthTexture2 = new RenderTexture((int)textureSize.x, (int) textureSize.y, 0, RenderTextureFormat.RGFloat, RenderTextureReadWrite.Linear);
-            // m_HiZDepthTexture2.filterMode = FilterMode.Point;
-            // m_HiZDepthTexture2.useMipMap = true;
-            // m_HiZDepthTexture2.autoGenerateMips = false;
-            // m_HiZDepthTexture2.Create();
-            // m_HiZDepthTexture2.hideFlags = HideFlags.HideAndDontSave;
-
             isCommandBufferInvalid = true;
-
-            // m_camera.targetTexture = m_HiZDepthTexture;
         }
         
         if (m_CommandBuffer == null || isCommandBufferInvalid == true)
@@ -139,8 +92,6 @@ public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
 
             m_CommandBuffer = new CommandBuffer();
             m_CommandBuffer.name = "Hi-Z Buffer";
-            
-            // m_CommandBuffer.DrawMeshInstancedIndirect(hiZController.m_boundingBoxMesh, 0, hiZController.m_allMaterial, 0, hiZController.m_allArgsBuffer,0, null);
 
             RenderTargetIdentifier id = new RenderTargetIdentifier(m_HiZDepthTexture);
             
@@ -149,7 +100,7 @@ public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
             m_CommandBuffer.ClearRandomWriteTargets();
             m_CommandBuffer.ClearRenderTarget(true, true, Color.black, 0f);
 
-             m_CommandBuffer.Blit(null, id, m_generateBufferMaterial, (int) Pass.Blit);
+            m_CommandBuffer.Blit(null, id, m_generateBufferMaterial, (int) Pass.Blit);
             
 
             for (int i = 0; i < m_LODCount; ++i)
@@ -157,9 +108,9 @@ public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
                 m_Temporaries[i] = Shader.PropertyToID("_09659d57_Temporaries" + i.ToString());
 
                 int width = ((int) textureSize.x);
-                width = width >>= 1;
+                width = width >> 1;
                 int height = ((int) textureSize.y);
-                height = height >>= 1;
+                height = height >> 1;
 
                 if (width == 0)
                 {
@@ -192,24 +143,44 @@ public CameraEvent m_CameraEvent = CameraEvent.AfterReflections;
             }
 
             m_CommandBuffer.ReleaseTemporaryRT(m_Temporaries[m_LODCount - 1]);
-            // m_CommandBuffer.CopyTexture(m_HiZDepthTexture, m_HiZDepthTexture2);
-            
             m_camera.AddCommandBuffer(m_CameraEvent, m_CommandBuffer);
         }
     }
     
     private void OnRenderImage(RenderTexture source, RenderTexture destination)
     {
-        if (DebugModeEnabled == false || HiZDepthTexture == null)
+        if (HiZDepthTexture == null)
         {
             Graphics.Blit(source, destination);
             return;
         }
 
         m_debugMaterial.SetInt("_LOD", DebugLodLevel);
-        Graphics.Blit(HiZDepthTexture, destination, m_debugMaterial);
+        Graphics.Blit(HiZDepthTexture, destination, m_debugMaterial);   
     }
 
+    private void OnDisable()
+    {
+        Clear();
+    }
+
+    public void Clear()
+    {
+        if (m_camera != null)
+        {
+            if (m_CommandBuffer != null)
+            {
+                m_camera.RemoveCommandBuffer(m_CameraEvent, m_CommandBuffer);
+                m_CommandBuffer = null;
+            }
+        }
+
+        if (m_HiZDepthTexture != null)
+        {
+            m_HiZDepthTexture.Release();
+            m_HiZDepthTexture = null;
+        }
+    }
 
     #endregion
 }

@@ -1,6 +1,7 @@
+
 # Indirect-Rendering-With-Compute-Shaders
 
-An example of drawing numerous instances in Unity3D using Graphics.DrawMeshInstancedIndirect.
+An example of drawing numerous instances in Unity3D using Compute shaders and Graphics.DrawMeshInstancedIndirect.
 
 ## Features
 
@@ -13,21 +14,24 @@ An example of drawing numerous instances in Unity3D using Graphics.DrawMeshInsta
 
 
 ## TODO
-- Implement Kostas approach:
-	- Dispatch the compute shader only once for all instances
-	- Implement Stream-Compaction
-	- Batch LOD meshes in to large buffers
+- Improve the instance sorting:
+	- On my Macbook pro (mid 2014) sorting takes approx 50% of the GPU time
+	- The sorting must that support instance counts not in the non power of two (right now I'm padding the data to become POT)
+- Try to make the buffers smaller. Ex: Use only one uint for bounds size by bit shifting.
 - Try out Raster Occlusion instead of Hi-Z (See "NVidia Siggraph 2014" & "Github - nvpro-samples" below)
 
-## Useful links
 
-[Sakib Saikia - Going Indirect on UE3](https://sakibsaikia.github.io/graphics/2017/08/18/Going-Indirect-On-UE3.html)
+
+
+## Useful links
 
 [Kostas Anagnostou - GPU Driven Rendering Experiments](http://bit.ly/Kostas-GPUDrivenRenderingExperiments)
 
 [Kostas Anagnostou - Experiments in GPU-based occlusion culling](https://interplayoflight.wordpress.com/2017/11/15/experiments-in-gpu-based-occlusion-culling/)
 
 [Kostas Anagnostou - Experiments in GPU-based occlusion culling part 2](https://interplayoflight.wordpress.com/2018/01/15/experiments-in-gpu-based-occlusion-culling-part-2-multidrawindirect-and-mesh-lodding/)
+
+[Sakib Saikia - Going Indirect on UE3](https://sakibsaikia.github.io/graphics/2017/08/18/Going-Indirect-On-UE3.html)
 
 [RasterGrid - Hierarchical-Z map based occlusion culling](http://rastergrid.com/blog/2010/10/hierarchical-z-map-based-occlusion-culling/)
 

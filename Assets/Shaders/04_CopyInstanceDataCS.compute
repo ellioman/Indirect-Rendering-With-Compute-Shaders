@@ -1,0 +1,78 @@
+﻿// kernels to compile...
+#pragma kernel CSMain
+
+// Defines
+#define THREAD_GROUP_SIZE_X 128
+#define THREAD_GROUP_SIZE_Y 1
+#define THREAD_GROUP_SIZE_Z 1
+
+struct ComputeShaderInputData
+{
+	uint drawCallID;		// 1
+	float3 position; 		// 3
+	float3 rotation; 		// 6
+	float uniformScale;		// 7
+	float3 boundsCenter; 	// 10
+	float3 boundsExtents; 	// 13
+	float distanceToCamera;	// 14
+};
+
+struct OutputData
+{
+	float3 position;// 3
+	float3 rotation;// 6
+	float uniformScale;	// 7
+};
+
+// Input
+uniform uint _NumberOfInstances;
+StructuredBuffer<ComputeShaderInputData> instanceDataIn;
+Buffer<uint> instancePredicatesIn;
+Buffer<uint> groupSumArray;
+Buffer<uint> scannedInstancePredicates;
+
+// Output
+RWStructuredBuffer<OutputData> instanceDataOut;
+RWBuffer<uint> drawcallIDDataOut;
+
+// Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
+groupshared uint temp[2 * THREAD_GROUP_SIZE_X];
+
+[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
+inline void CSMain (
+		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
+		in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
+		in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
+		in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
+	)        
+{
+	uint tID = _dispatchThreadID.x;
+	uint groupSum = _groupID.x > 0 ? groupSumArray[_groupID.x] : 0;
+	uint instanceDataOutIndex;
+
+	//scatter results
+	if (instancePredicatesIn[tID] == 1)
+	{
+		instanceDataOutIndex = scannedInstancePredicates[tID] + groupSum;
+
+		//copy transform
+		ComputeShaderInputData instance = instanceDataIn[tID];
+
+		OutputData output;
+		output.position = instance.position;
+		output.rotation = instance.rotation;
+		output.uniformScale = instance.uniformScale;
+		
+		instanceDataOut[instanceDataOutIndex] = output;
+
+		// instanceDataOut[instanceDataOutIndex].World_Row1 = instanceDataIn[tID].World_Row1;
+		// instanceDataOut[instanceDataOutIndex].World_Row2 = instanceDataIn[tID].World_Row2;
+		// instanceDataOut[instanceDataOutIndex].World_Row3 = instanceDataIn[tID].World_Row3;
+
+		//copy packed uint with mesh lod/index and drawcall_ID
+		// instanceDataOut[instanceDataOutIndex].MeshLOD_MeshIndex_DrawcallID = 0;//instanceDataIn[ tID].MeshLOD_MeshIndex_DrawcallID;
+
+		// //write to the drawcall ID stream for this instance
+		// drawcallIDDataOut[ instanceDataOutIndex ] = tID % 2;//instanceDataIn[tID].MeshLOD_MeshIndex_DrawcallID & 0xFFFF ;
+	}
+}

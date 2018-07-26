@@ -38,7 +38,7 @@ public class FlyCamera : MonoBehaviour
 	}
 
 
-	void Update()
+	void FixedUpdate()
 	{
 		// This should prevent the mouse input from getting through the UI.
 		//if (eventSystem.IsPointerOverGameObject() && !dragging)

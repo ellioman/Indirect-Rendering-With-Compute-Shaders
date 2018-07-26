@@ -2,12 +2,11 @@
 #pragma kernel CSMain
 
 // Defines
-#define THREAD_GROUP_SIZE_X 1
+#define THREAD_GROUP_SIZE_X 64
 #define THREAD_GROUP_SIZE_Y 1
 #define THREAD_GROUP_SIZE_Z 1
-#define ALWAYS_DRAW_RANGE 50
+
 #define SHOULD_FRUSTUM_CULL 1
-// #define SHOULD_SHADOW_CULL 1
 #define SHOULD_OCCLUSION_CULL 1
 #define SHOULD_LOD 1
 
@@ -28,39 +27,31 @@ struct BoundingBox
 
 struct ComputeShaderInputData
 {
+	uint drawCallID;		// 1
 	float3 position; 		// 3
 	float3 rotation; 		// 6
 	float uniformScale;		// 7
 	float3 boundsCenter; 	// 10
 	float3 boundsExtents; 	// 13
-	float lod00Range; 		// 14
-	float lod01Range; 		// 15
-	float lod02Range; 		// 16
-};
-
-struct OutputData
-{
-	float3 position;// 3
-	float3 rotation;// 6
-	float uniformScale;	// 7
-	float unused;	// 8
-
+	float distanceToCamera; // 14
 };
 
 // Input
 RWStructuredBuffer<ComputeShaderInputData> positionBuffer;
-AppendStructuredBuffer<OutputData> lod00PositionsBuffer;
-AppendStructuredBuffer<OutputData> lod01PositionsBuffer;
-AppendStructuredBuffer<OutputData> lod02PositionsBuffer;
+
+// Output
+RWStructuredBuffer<uint> argsBuffer;
+RWStructuredBuffer<uint> _IsVisibleBuffer;
+
 
 uniform float _ShadowCullingLength;
 uniform float3 _LightDirection;
 uniform float4x4 _UNITY_MATRIX_MVP;
 uniform float2 _HiZTextureSize;
-uniform float3 _CamPos;
+uniform float3 _CamNearCenter;
+uniform float3 _CamFarCenter;
 uniform Texture2D<float4> _HiZMap;
 uniform SamplerState sampler_HiZMap; // "sampler" + “_HiZMap”
-uniform uint _NumberOfInstances;
 uniform float _Test;
 
 inline bool AreDirectionsFacingEachother(float3 dir1, float3 dir2)
@@ -93,24 +84,14 @@ inline void CalculateClipMinAndMax(in BoundingBox boxCorners, inout float3 clipm
 	boxCorners.corners[5] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[5]);
 	boxCorners.corners[6] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[6]);
 	boxCorners.corners[7] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[7]);
-
-	// clipmin = (boxCorners.corners[0] / boxCorners.corners[0].w).xyz;
-	// clipmin.z = 1.0 - clipmin.z;
-	// clipmin.xy = clipmin.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
-	
-	// clipmax = (boxCorners.corners[0] / boxCorners.corners[0].w).xyz;
-	// clipmax.z = 1.0 - clipmax.z;
-    // clipmax.xy = clipmax.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
 	
 	clipmin = 1.0;
 	clipmax = 0.0;
 	for (int n = 0; n < 8; n++)
 	{
 		float4 clipPos = boxCorners.corners[n] / boxCorners.corners[n].w;
-		clipPos.z = 1.0 - clipPos.z;
-		// clipPos.z = clipPos.z * 0.5 + 0.5;
-
         clipPos.xy = clipPos.xy * float2(0.5, 0.5) + float2(0.5, 0.5);
+		clipPos.z = 1.0 - clipPos.z;
 		
 		clipmin.x = min(clipmin.x, clipPos.x);
 		clipmin.y = min(clipmin.y, clipPos.y);
@@ -170,7 +151,6 @@ inline bool ShouldHiZCull(float3 position, BoundingBox boundingBox)
         }
         yPos += stepY;	
     }
-
 	return clipmin.z < HIZdepth;
 	
 	// Debug...
@@ -184,10 +164,9 @@ inline bool ShouldHiZCull(float3 position, BoundingBox boundingBox)
 	// return clipmin.x < _Test;
 }
 
-inline void CalculateCameraPlanes(inout FrustumPlane mPlanes[5])
+inline void CalculateCameraPlanes(inout FrustumPlane mPlanes[6])
 {
 	// Here we are using Column Major matrix
-	// We skip the far plane and assume the user always has the furthest LOD distace closer than the far plane!
 
 	// Row Major Matrix
     // _m00, _m01, _m02, _m03
@@ -243,29 +222,29 @@ inline void CalculateCameraPlanes(inout FrustumPlane mPlanes[5])
 	);
 
 	// Far clipping plane.
-	// mPlanes[5].normal = float4(
-	// 	_UNITY_MATRIX_MVP._m30 - _UNITY_MATRIX_MVP._m20, 
-	// 	_UNITY_MATRIX_MVP._m31 - _UNITY_MATRIX_MVP._m21, 
-	// 	_UNITY_MATRIX_MVP._m32 - _UNITY_MATRIX_MVP._m22, 
-	// 	_UNITY_MATRIX_MVP._m33 - _UNITY_MATRIX_MVP._m23
-	// );
+	mPlanes[5].normal = float4(
+		_UNITY_MATRIX_MVP._m30 - _UNITY_MATRIX_MVP._m20, 
+		_UNITY_MATRIX_MVP._m31 - _UNITY_MATRIX_MVP._m21, 
+		_UNITY_MATRIX_MVP._m32 - _UNITY_MATRIX_MVP._m22, 
+		_UNITY_MATRIX_MVP._m33 - _UNITY_MATRIX_MVP._m23
+	);
 	
-	// Normalize the planes => normalizedPlane = (plane.xyzw) / sqrt(plane.x^2 + plane.y^2 + plane.z^2)
+	// Normalize the planes: normalizedPlane = (plane.xyzw) / sqrt(plane.x^2 + plane.y^2 + plane.z^2)
 	// plane.xyz is now the normal and plane.w contains the distance from zero pos to the plane
 	mPlanes[0].normal /= sqrt(mPlanes[0].normal.x * mPlanes[0].normal.x + mPlanes[0].normal.y * mPlanes[0].normal.y + mPlanes[0].normal.z * mPlanes[0].normal.z);
 	mPlanes[1].normal /= sqrt(mPlanes[1].normal.x * mPlanes[1].normal.x + mPlanes[1].normal.y * mPlanes[1].normal.y + mPlanes[1].normal.z * mPlanes[1].normal.z);
 	mPlanes[2].normal /= sqrt(mPlanes[2].normal.x * mPlanes[2].normal.x + mPlanes[2].normal.y * mPlanes[2].normal.y + mPlanes[2].normal.z * mPlanes[2].normal.z);
 	mPlanes[3].normal /= sqrt(mPlanes[3].normal.x * mPlanes[3].normal.x + mPlanes[3].normal.y * mPlanes[3].normal.y + mPlanes[3].normal.z * mPlanes[3].normal.z);
 	mPlanes[4].normal /= sqrt(mPlanes[4].normal.x * mPlanes[4].normal.x + mPlanes[4].normal.y * mPlanes[4].normal.y + mPlanes[4].normal.z * mPlanes[4].normal.z);
-	// mPlanes[5].normal /= sqrt(mPlanes[5].normal.x * mPlanes[5].normal.x + mPlanes[5].normal.y * mPlanes[5].normal.y + mPlanes[5].normal.z * mPlanes[5].normal.z);
+	mPlanes[5].normal /= sqrt(mPlanes[5].normal.x * mPlanes[5].normal.x + mPlanes[5].normal.y * mPlanes[5].normal.y + mPlanes[5].normal.z * mPlanes[5].normal.z);
 	
 	// Assign a single point that's on the plane
-	mPlanes[0].pointOnPlane = _CamPos;
-	mPlanes[1].pointOnPlane = _CamPos;
-	mPlanes[2].pointOnPlane = _CamPos;
-	mPlanes[3].pointOnPlane = _CamPos;
-	mPlanes[4].pointOnPlane = _CamPos;
-	// mPlanes[5].pointOnPlane = _CamFarCenter;
+	mPlanes[0].pointOnPlane = _CamNearCenter;
+	mPlanes[1].pointOnPlane = _CamNearCenter;
+	mPlanes[2].pointOnPlane = _CamNearCenter;
+	mPlanes[3].pointOnPlane = _CamNearCenter;
+	mPlanes[4].pointOnPlane = _CamNearCenter;
+	mPlanes[5].pointOnPlane = _CamNearCenter;
 }
 
 // http://www.iquilezles.org/www/articles/frustumcorrect/frustumcorrect.htm
@@ -277,46 +256,10 @@ inline bool ShouldFrustumCull(BoundingBox box)
 	}
 
 	// Calculate the frustum planes
-	FrustumPlane mPlanes[5];
+	FrustumPlane mPlanes[6];
 	CalculateCameraPlanes(mPlanes);
 
-	// check box outside/inside of frustum
-	int result = 0;
-	int i = 0;
-	for(; i < 5; i++)
-	{
-		result = 0;
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.minPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.minPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.maxPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.maxPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.minPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.minPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.maxPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.maxPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		
-		// If the object is completely outside of that plane...
-		if (result == 8)
-		{
-			// We break and do a shadow check...
-			break;
-		}
-	}
-
-	// check frustum outside/inside box
-	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].x > box.max.x)?1:0); if( result==8 ) return false;
-	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].x < box.min.x)?1:0); if( result==8 ) return false;
-	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].y > box.max.y)?1:0); if( result==8 ) return false;
-	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].y < box.min.y)?1:0); if( result==8 ) return false;
-	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].z > box.max.z)?1:0); if( result==8 ) return false;
-	// result=0; for( int i=0; i<fru.mPoints.Length; i++ ) result += ((fru.mPoints[i].z < box.min.z)?1:0); if( result==8 ) return false;
-
-	// if (SHOULD_SHADOW_CULL == false)
-	// {
-
-	// }
-
-	// Shadow Culling
+	// Frustum Culling
 	// Move the planes facing away from the light direction, towards the light so we can get objects adding shadows to our frustum
 	float3 shadowCullingOffset = -(_LightDirection * _ShadowCullingLength);
 	mPlanes[0].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[0].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
@@ -324,22 +267,27 @@ inline bool ShouldFrustumCull(BoundingBox box)
 	mPlanes[2].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[2].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
 	mPlanes[3].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[3].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
 	mPlanes[4].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[4].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
-	// mPlanes[5].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[5].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
+	mPlanes[5].pointOnPlane += (AreDirectionsFacingEachother(mPlanes[5].normal.xyz, _LightDirection) ? shadowCullingOffset : 0);
 
-	i = 0;
-	for(; i < 5; i++)
+	// check box outside/inside of frustum
+	int result = 0;
+	float3 planeNormal;
+	float3 pointOnPlane;
+	for(int i = 0; i < 5; i++)
 	{
 		result = 0;
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.minPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.minPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.maxPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.maxPos.y, box.minPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.minPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.minPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.minPos.x, box.maxPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
-		result += ((dot( mPlanes[i].normal.xyz, float3(box.maxPos.x, box.maxPos.y, box.maxPos.z) - mPlanes[i].pointOnPlane) <= 0.0 ) ? 1 : 0);
+		planeNormal = mPlanes[i].normal.xyz;
+		pointOnPlane = mPlanes[i].pointOnPlane;
+		result += ((dot(planeNormal, float3(box.minPos.x, box.minPos.y, box.minPos.z) - pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot(planeNormal, float3(box.maxPos.x, box.minPos.y, box.minPos.z) - pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot(planeNormal, float3(box.minPos.x, box.maxPos.y, box.minPos.z) - pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot(planeNormal, float3(box.maxPos.x, box.maxPos.y, box.minPos.z) - pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot(planeNormal, float3(box.minPos.x, box.minPos.y, box.maxPos.z) - pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot(planeNormal, float3(box.maxPos.x, box.minPos.y, box.maxPos.z) - pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot(planeNormal, float3(box.minPos.x, box.maxPos.y, box.maxPos.z) - pointOnPlane) <= 0.0 ) ? 1 : 0);
+		result += ((dot(planeNormal, float3(box.maxPos.x, box.maxPos.y, box.maxPos.z) - pointOnPlane) <= 0.0 ) ? 1 : 0);
 		
-		if (result==8)
+		if (result == 8)
 		{
 			return true;
 		}
@@ -349,69 +297,57 @@ inline bool ShouldFrustumCull(BoundingBox box)
 }
 
 // Assign LOD Level
-inline void AssignLod(ComputeShaderInputData instance, float camDist)
+inline void AssignLod(ComputeShaderInputData instance, float camDist, uint tID)
 {
-	OutputData output;
-	output.position = instance.position;
-	output.rotation = instance.rotation;
-	output.uniformScale = instance.uniformScale;
-	output.unused = 0;
-
-	if (SHOULD_LOD == false)
+	if (camDist < 600)
 	{
-		lod02PositionsBuffer.Append(output);
+		InterlockedAdd(argsBuffer[instance.drawCallID + 1], 1);
+		_IsVisibleBuffer[tID] = 1;
 	}
-	else if (camDist < instance.lod00Range)
+	else if (camDist < 1200)
 	{
-		lod00PositionsBuffer.Append(output);
+		InterlockedAdd(argsBuffer[instance.drawCallID + 6], 1);
+		_IsVisibleBuffer[tID] = 1;
 	}
-	else if (camDist < instance.lod01Range)
+	else
 	{
-		lod01PositionsBuffer.Append(output);
-	}
-	else if (camDist < instance.lod02Range)
-	{
-		lod02PositionsBuffer.Append(output);
+		InterlockedAdd(argsBuffer[instance.drawCallID + 11], 1);
+		_IsVisibleBuffer[tID] = 1;
 	}
 }
 
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 inline void CSMain (
-		uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
-		uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
-		uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount (The variable I am looking for)
-		uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
+		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
+		in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
+		in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
+		in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
 	)        
 {
     // Calculate the instance index
-	uint index = _dispatchThreadID.x;
-	if (index > _NumberOfInstances)
+	uint tID = _dispatchThreadID.x;
+
+	// Reset the is visible state
+	_IsVisibleBuffer[tID] = 0;
+
+	// If the instance is the power of two padding...
+	if (positionBuffer[tID].drawCallID == 666)
 	{
 		return;
 	}
 
-	ComputeShaderInputData instance = positionBuffer[index];
-	float camDist = abs(distance(instance.position.xyz, _CamPos));
+	// Update the instance to camera distance
+	positionBuffer[tID].distanceToCamera = distance(positionBuffer[tID].position.xyz, _CamNearCenter.xyz);
 	
-	// Early out check: If the position is further than our lowest LOD level
-	if (camDist >= instance.lod02Range)
-	{
-		return;
-	}
-
-	// Temp: Always draw objects very close 
-	//if (camDist < ALWAYS_DRAW_RANGE)
-	//{
-	//	AssignLod(instance, camDist);
-	//	return;
-	//}
-
+	// Get the instance data
+	ComputeShaderInputData instance = positionBuffer[tID];
+	
 	// Get the bounding box corners
 	BoundingBox boundingBox;
 	CalculateBoundingBoxCorners(instance.boundsCenter, instance.uniformScale * instance.boundsExtents, boundingBox);
 
-	// Frustum Culling & Shadow culling
+	// Frustum Culling
 	if (ShouldFrustumCull(boundingBox))
 	{
 		return;
@@ -424,5 +360,5 @@ inline void CSMain (
 	}
 	
 	// LOD
-	AssignLod(instance, camDist);
+	AssignLod(instance, instance.distanceToCamera, tID);
 }

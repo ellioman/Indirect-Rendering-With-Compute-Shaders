@@ -8,13 +8,8 @@ public class IndirectInstanceData
 	public Mesh lod00Mesh;
 	public Mesh lod01Mesh;
 	public Mesh lod02Mesh;
-	public Material lod00Material;
-	public Material lod01Material;
-	public Material lod02Material;
+	public Material material;
 	public Vector3[] rotations;
 	public Vector3[] positions;
 	public float[] uniformScales;
-	public float lod00Range;
-	public float lod01Range;
-	public float lod02Range;
 }

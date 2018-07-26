@@ -4,19 +4,6 @@ Shader "HiZ/Objects"
 {
 	Properties{
 		_Color("Color", Color) = (1,1,1,1)
-		_MainTex("Albedo (RGB)", 2D) = "white" {}
-		_MainTexSide("Side/Bottom Texture", 2D) = "white" {}
-		_NormalMap("Normal Map", 2D) = "bump" {}
-		_NormalScale("Normal Scale", Range(-3,3)) = 1.0
-		_Glossiness("Smoothness", Range(0,1)) = 0.5
-		_Metallic("Metallic", Range(0,1)) = 0.0
-
-		_Scale("Top Scale", Range(-2,2)) = 1
-        _SideScale("Side Scale", Range(-2,2)) = 1
-        _NoiseScale("Noise Scale", Range(-2,2)) = 1
-        _TopSpread("TopSpread", Range(-2,2)) = 1
-        _EdgeWidth("EdgeWidth", Range(0,0.5)) = 1
-			_Test("_TEST", Range(0,360)) = 1
 	}
 	SubShader
 	{
@@ -28,7 +15,6 @@ Shader "HiZ/Objects"
 		#pragma surface surf Standard addshadow
         #pragma multi_compile_instancing
         #pragma instancing_options procedural:setup
-		 #pragma instancing_options assumeuniformscaling
 
 		#if SHADER_TARGET >= 35 && (defined(SHADER_API_D3D11) || defined(SHADER_API_GLES3) || defined(SHADER_API_GLCORE) || defined(SHADER_API_XBOXONE) || defined(SHADER_API_PSSL) || defined(SHADER_API_SWITCH) || defined(SHADER_API_VULKAN) || (defined(SHADER_API_METAL) && defined(UNITY_COMPILER_HLSLCC)))
             #define SUPPORT_STRUCTUREDBUFFER
@@ -38,19 +24,11 @@ Shader "HiZ/Objects"
             #define ENABLE_INSTANCING
         #endif
 
-        uniform half _Glossiness;
-		uniform half _Metallic;
-		uniform fixed _NormalScale;
-		uniform float  _TopSpread;
-		uniform float  _EdgeWidth;
-		uniform float _NoiseScale;
-		uniform float _Scale;
-		uniform float _SideScale;
 		uniform fixed4 _Color;
 		uniform sampler2D _MainTex;
 		uniform sampler2D _MainTexSide;
 		uniform sampler2D _NormalMap;
-		float _Test;
+		uint _Test;
 		
 
 		struct Input
@@ -59,7 +37,6 @@ Shader "HiZ/Objects"
 			float2 uv_NormalMap;
 			float3 worldPos; // world position built-in value
         	float3 worldNormal; // world normal built-in value
-			// uint id;
 		};
 
 		#if defined(ENABLE_INSTANCING)
@@ -68,10 +45,9 @@ Shader "HiZ/Objects"
 			float3 position;// 3
 			float3 rotation;// 6
 			float uniformScale;	// 7
-			float unused;	// 8
 		};
 
-			StructuredBuffer<OutputData> positionBuffer;
+		StructuredBuffer<OutputData> positionBuffer;
 		#endif
 		
 		float4x4 rotationMatrix(float3 axis, float angle)
@@ -115,18 +91,13 @@ Shader "HiZ/Objects"
 					minor(_11_12_13, _21_22_23, _31_32_33)
 					);
 			#undef minor
-				return transpose(cofactors) / determinant(input);
+			return transpose(cofactors) / determinant(input);
 		}
-
 
 		void setup()
 		{
-			// Positions are calculated in the compute shader.
-			// Here we just use them.
 			#if defined(ENABLE_INSTANCING)
-				
-				uint index = unity_InstanceID;
-				OutputData instance = positionBuffer[index];
+				OutputData instance = positionBuffer[unity_InstanceID];
 				float3 position = instance.position;
 				float scale = instance.uniformScale;
 
@@ -143,26 +114,12 @@ Shader "HiZ/Objects"
 				};
 
 				unity_ObjectToWorld = mul(translation, rotMatrix);
-				unity_WorldToObject = inverse(unity_ObjectToWorld);
+				//unity_WorldToObject = inverse(unity_ObjectToWorld);
 			#endif
 		}
 
 		void surf(Input IN, inout SurfaceOutputStandard o) 
 		{
-			// fixed4 c = tex2D (_MainTex, IN.uv_MainTex);
-            // o.Albedo = c.rgb;
-            // o.Metallic = _Metallic;
-            // o.Smoothness = _Glossiness;
-            // o.Alpha = c.a;
-			
-			// o.Albedo = tex2D(_MainTex, IN.uv_MainTex) * _Color;
-			// o.Normal = UnpackScaleNormal(tex2D(_NormalMap, IN.uv_NormalMap), _NormalScale);
-			// // o.Albedo *= IN.uv_NormalMap.r + 1;//lerp(1.0, pnoise(IN.uv_NormalMap, o.Albedo.rg).r, _Test);
-			// // o.Albedo = _Color;//float3(IN.uv_MainTex, 0.0);//1 + pnoise(IN.worldPos * 0.01, float2(0.2,0.3));//o.Normal;
-			// o.Metallic = _Metallic;
-			// o.Smoothness = _Glossiness;
-			// o.Alpha = 1.0;
-
 			o.Albedo = _Color;
 		}
 	ENDCG
