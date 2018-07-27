@@ -12,7 +12,7 @@ An example of drawing numerous instances in Unity3D using Compute shaders and Gr
 - Extending camera frustum towards light to include shadow casting objects
 - LOD objects using the distance from camera to object
 
-##Project Setup
+## Project Setup
 - "_Example.cs" script on the "Example" game object:
 	- Creates the instance data and sends it to the Indirect Renderer class.
 - "IndirectRenderer.cs" on the "MainCamera" game object:
