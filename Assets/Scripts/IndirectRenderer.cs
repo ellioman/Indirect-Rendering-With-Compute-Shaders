@@ -80,6 +80,7 @@ public partial class IndirectRenderer : MonoBehaviour
     [Space(10f)]
 	public DebugStop m_debugStop = DebugStop.DontStop;
 	public DebugLog m_debugLog = DebugLog.DontLog;
+	public bool m_showLOD = false;
     public bool m_showHiZTexture = false;
     [SerializeField] [Range(0, 16)] private int m_hiZTextureLodLevel = 0;
 
@@ -159,9 +160,16 @@ public partial class IndirectRenderer : MonoBehaviour
 	{
 		m_hiZBuffer.DebugLodLevel = m_hiZTextureLodLevel;
 		m_camera.enabled = !m_showHiZTexture;
+
+		for (int i = 0; i < m_renderers.Count; i++)
+		{
+			m_renderers[i].Lod00MatPropBlock.SetFloat("_ShowLOD", m_showLOD ? 1f : 0f);
+			m_renderers[i].Lod01MatPropBlock.SetFloat("_ShowLOD", m_showLOD ? 1f : 0f);
+			m_renderers[i].Lod02MatPropBlock.SetFloat("_ShowLOD", m_showLOD ? 1f : 0f);
+		}
 	}
 
-	private void OnPreCull()
+	private void LateUpdate()//OnPreCull()
 	{
 		if (m_renderers == null
             || m_renderers.Count == 0
@@ -182,7 +190,7 @@ public partial class IndirectRenderer : MonoBehaviour
 
 				Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_drawBounds, m_argsBuffer, (i * 60) + 00, irm.Lod00MatPropBlock, m_shadowCastingMode, m_receiveShadows);
 				Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_drawBounds, m_argsBuffer, (i * 60) + 20, irm.Lod01MatPropBlock, m_shadowCastingMode, m_receiveShadows);
-				Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_drawBounds, m_argsBuffer, (i * 60) + 40, irm.Lod02MatPropBlock, ShadowCastingMode.Off, false);	
+				Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_drawBounds, m_argsBuffer, (i * 60) + 40, irm.Lod02MatPropBlock, m_shadowCastingMode, m_receiveShadows);	
 			}
 		}
     }

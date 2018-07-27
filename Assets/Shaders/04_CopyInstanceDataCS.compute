@@ -1,42 +1,48 @@
-﻿// kernels to compile...
+﻿//--------------------------------------------------------------------------------------
+// Includes
+//--------------------------------------------------------------------------------------
+
+#include "ShaderInclude_IndirectStructs.cginc"
+
+//--------------------------------------------------------------------------------------
+// Pragmas
+//--------------------------------------------------------------------------------------
+
 #pragma kernel CSMain
 
-// Defines
+//--------------------------------------------------------------------------------------
+// Constants
+//--------------------------------------------------------------------------------------
+
 #define THREAD_GROUP_SIZE_X 128
 #define THREAD_GROUP_SIZE_Y 1
 #define THREAD_GROUP_SIZE_Z 1
 
-struct ComputeShaderInputData
-{
-	uint drawCallID;		// 1
-	float3 position; 		// 3
-	float3 rotation; 		// 6
-	float uniformScale;		// 7
-	float3 boundsCenter; 	// 10
-	float3 boundsExtents; 	// 13
-	float distanceToCamera;	// 14
-};
+//--------------------------------------------------------------------------------------
+// Constant Buffers
+//--------------------------------------------------------------------------------------
 
-struct OutputData
+cbuffer CB
 {
-	float3 position;// 3
-	float3 rotation;// 6
-	float uniformScale;	// 7
-};
+	groupshared uint temp[2 * THREAD_GROUP_SIZE_X];
+}
 
-// Input
+//--------------------------------------------------------------------------------------
+// Structured Buffers
+//--------------------------------------------------------------------------------------
+
 StructuredBuffer<ComputeShaderInputData> instanceDataIn;
 Buffer<uint> instancePredicatesIn;
 Buffer<uint> groupSumArray;
 Buffer<uint> scannedInstancePredicates;
-
-// Output
 RWStructuredBuffer<OutputData> instanceDataOut;
 RWBuffer<uint> drawcallIDDataOut;
 
-// Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
-groupshared uint temp[2 * THREAD_GROUP_SIZE_X];
+//--------------------------------------------------------------------------------------
+// Kernels & Functions
+//--------------------------------------------------------------------------------------
 
+// Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 inline void CSMain (
 		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;

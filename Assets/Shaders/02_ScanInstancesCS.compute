@@ -1,21 +1,45 @@
-﻿// kernels to compile...
+﻿//--------------------------------------------------------------------------------------
+// Includes
+//--------------------------------------------------------------------------------------
+
+
+
+//--------------------------------------------------------------------------------------
+// Pragmas
+//--------------------------------------------------------------------------------------
+
 #pragma kernel CSMain
 
-// Defines
+//--------------------------------------------------------------------------------------
+// Constants
+//--------------------------------------------------------------------------------------
+
 #define THREAD_GROUP_SIZE_X 64
 #define THREAD_GROUP_SIZE_Y 1
 #define THREAD_GROUP_SIZE_Z 1
 
-// Input
-StructuredBuffer<uint> instancePredicatesIn;
+//--------------------------------------------------------------------------------------
+// Constant Buffers
+//--------------------------------------------------------------------------------------
 
-// Output
+cbuffer CB
+{
+	groupshared uint temp[2 * THREAD_GROUP_SIZE_X];
+}
+
+//--------------------------------------------------------------------------------------
+// Structured Buffers
+//--------------------------------------------------------------------------------------
+
+StructuredBuffer<uint> instancePredicatesIn;
 RWBuffer<uint> groupSumArray;
 RWBuffer<uint> scannedInstancePredicates;
 
-// Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
-groupshared uint temp[2 * THREAD_GROUP_SIZE_X];
+//--------------------------------------------------------------------------------------
+// Kernels & Functions
+//--------------------------------------------------------------------------------------
 
+// Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 inline void CSMain (
 		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;

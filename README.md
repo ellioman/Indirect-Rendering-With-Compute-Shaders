@@ -26,6 +26,7 @@ An example of drawing numerous instances in Unity3D using Compute shaders and Gr
 	- The GPU sorting must support instance numbers that are not in the non power of two (right now I'm padding the data to become POT)
 	- Find a better performant approach for the CPU Sorting
 - Try to make the compute buffers smaller in size. Ex: Pack the three floats, used for bounds size, into one uint.
+- Find out why I need the 1.8 multiplier for the _CameraDepthTexture.Sample(...) (HiZInclude.cginc)
 - Try out Raster Occlusion instead of Hi-Z (See "NVidia Siggraph 2014" & "Github - nvpro-samples" below)
 
 

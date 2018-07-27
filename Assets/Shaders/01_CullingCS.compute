@@ -1,7 +1,19 @@
-﻿// kernels to compile...
+﻿//--------------------------------------------------------------------------------------
+// Includes
+//--------------------------------------------------------------------------------------
+
+#include "ShaderInclude_IndirectStructs.cginc"
+
+//--------------------------------------------------------------------------------------
+// Pragmas
+//--------------------------------------------------------------------------------------
+
 #pragma kernel CSMain
 
-// Defines
+//--------------------------------------------------------------------------------------
+// Constants
+//--------------------------------------------------------------------------------------
+
 #define THREAD_GROUP_SIZE_X 64
 #define THREAD_GROUP_SIZE_Y 1
 #define THREAD_GROUP_SIZE_Z 1
@@ -13,49 +25,33 @@
 #define LOD00_RANGE 500
 #define LOD01_RANGE 1500
 
+//--------------------------------------------------------------------------------------
+// Constant Buffers
+//--------------------------------------------------------------------------------------
 
-// Structs
-struct FrustumPlane
+cbuffer CB
 {
-	float4 normal;
-	float3 pointOnPlane;
+	float _ShadowCullingLength;
+	float2 _HiZTextureSize;
+	float3 _CamFarCenter;
+	float3 _CamNearCenter;
+	float3 _LightDirection;
+	float4x4 _UNITY_MATRIX_MVP;
+	Texture2D<float4> _HiZMap;
+	SamplerState sampler_HiZMap; // "sampler" + “_HiZMap”
 };
 
-struct BoundingBox
-{
-	float4 corners[8];
-	float3 center;
-	float3 minPos;
-	float3 maxPos;
-};
+//--------------------------------------------------------------------------------------
+// Structured Buffers
+//--------------------------------------------------------------------------------------
 
-struct ComputeShaderInputData
-{
-	uint drawCallID;		// 1
-	float3 position; 		// 3
-	float3 rotation; 		// 6
-	float uniformScale;		// 7
-	float3 boundsCenter; 	// 10
-	float3 boundsExtents; 	// 13
-	float distanceToCamera; // 14
-};
-
-// Input
-uniform float _ShadowCullingLength;
-uniform float3 _LightDirection;
-uniform float4x4 _UNITY_MATRIX_MVP;
-uniform float2 _HiZTextureSize;
-uniform float3 _CamNearCenter;
-uniform float3 _CamFarCenter;
-uniform Texture2D<float4> _HiZMap;
-uniform SamplerState sampler_HiZMap; // "sampler" + “_HiZMap”
 RWStructuredBuffer<ComputeShaderInputData> positionBuffer;
-
-// Output
 RWStructuredBuffer<uint> argsBuffer;
 RWStructuredBuffer<uint> _IsVisibleBuffer;
 
-
+//--------------------------------------------------------------------------------------
+// Kernels & Functions
+//--------------------------------------------------------------------------------------
 
 inline bool AreDirectionsFacingEachother(float3 dir1, float3 dir2)
 {
@@ -340,7 +336,7 @@ inline void CSMain (
 	
 	// Get the bounding box corners
 	BoundingBox boundingBox;
-	CalculateBoundingBoxCorners(instance.boundsCenter, instance.uniformScale * instance.boundsExtents, boundingBox);
+	CalculateBoundingBoxCorners(instance.position, instance.boundsExtents, boundingBox);
 
 	// Frustum Culling
 	if (ShouldFrustumCull(boundingBox))

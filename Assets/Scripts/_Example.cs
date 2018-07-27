@@ -7,7 +7,8 @@ public class _Example : MonoBehaviour
 {
 	#region Variables
 
-	// Public 
+	// Public
+	public Vector2 scaleRange = new Vector2();
 	public Transform prefab;
 	public NumberOfInstances numberOfInstances;
 	public IndirectRenderer indirectRenderer;
@@ -16,9 +17,6 @@ public class _Example : MonoBehaviour
 	// Enums
 	public enum NumberOfInstances
 	{
-		_256 = 256,
-		_512 = 512,
-		_1024 = 1024,
 		_2048 = 2048,
 		_4096 = 4096,
 		_8192 = 8192,
@@ -61,9 +59,9 @@ public class _Example : MonoBehaviour
 
 			for (int k = 0; k < numOfInstancesPerType; k++)
 			{
-				instances[i].positions[k] = new Vector3(Random.Range(-areaSize, areaSize), 15f, Random.Range(-areaSize, areaSize));
+				instances[i].positions[k] = new Vector3(Random.Range(-areaSize, areaSize), 55f, Random.Range(-areaSize, areaSize));
 				instances[i].rotations[k] = new Vector3(0f, 0f, 0f);
-				instances[i].uniformScales[k] = Random.Range(0.15f, 0.3f);
+				instances[i].uniformScales[k] = Random.Range(scaleRange.x, scaleRange.y);
 			}
 		}
 	}
@@ -89,7 +87,6 @@ public class _Example : MonoBehaviour
 				Transform t = Instantiate(prefab);
 				t.parent = parent;
 				t.localPosition = positions[k];
-				Debug.Log(t.position + " vs. " + positions[k]);
 				t.rotation = Quaternion.Euler(instances[i].rotations[k]);
 				t.localScale = Vector3.one * instances[i].uniformScales[k];
 			}

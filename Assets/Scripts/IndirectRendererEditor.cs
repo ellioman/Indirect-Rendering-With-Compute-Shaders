@@ -1,16 +1,11 @@
+#if UNITY_EDITOR
+
 using System;
 using UnityEngine;
-using UnityEngine.Rendering;
-using System.Collections.Generic;
-using System.Linq;
-using Random = UnityEngine.Random;
-
 
 public partial class IndirectRenderer : MonoBehaviour
 {
     #region Editor
-
-    #if UNITY_EDITOR
 
     bool AreDirectionsFacingEachother(Vector3 dir1, Vector3 dir2)
     {
@@ -74,6 +69,7 @@ public partial class IndirectRenderer : MonoBehaviour
         }
     }
 
-    #endif
     #endregion
 }
+
+#endif

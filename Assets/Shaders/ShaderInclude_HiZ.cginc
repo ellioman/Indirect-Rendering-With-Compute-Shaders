@@ -1,13 +1,5 @@
-// Upgrade NOTE: replaced 'mul(UNITY_MATRIX_MVP,*)' with 'UnityObjectToClipPos(*)'
-
-// Upgrade NOTE: replaced 'mul(UNITY_MATRIX_MVP,*)' with 'UnityObjectToClipPos(*)'
-
-// Upgrade NOTE: replaced '_Object2World' with 'unity_ObjectToWorld'
-
-// Upgrade NOTE: replaced '_Object2World' with 'unity_ObjectToWorld'
-
-#ifndef __HI_Z__
-#define __HI_Z__
+#ifndef __HIZ_INCLUDE__
+#define __HIZ_INCLUDE__
 
 #include "UnityCG.cginc"
 

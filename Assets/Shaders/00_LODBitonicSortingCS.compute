@@ -1,4 +1,10 @@
 ﻿//--------------------------------------------------------------------------------------
+// Includes
+//--------------------------------------------------------------------------------------
+
+#include "ShaderInclude_IndirectStructs.cginc"
+
+//--------------------------------------------------------------------------------------
 // Pragmas
 //--------------------------------------------------------------------------------------
 
@@ -12,20 +18,10 @@
 #define BITONIC_BLOCK_SIZE 256
 #define TRANSPOSE_BLOCK_SIZE 8
 
-struct ComputeShaderInputData
-{
-	uint drawCallID;		// 1
-	float3 position; 		// 3
-	float3 rotation; 		// 6
-	float uniformScale;		// 7
-	float3 boundsCenter; 	// 10
-	float3 boundsExtents; 	// 13
-	float distanceToCamera; // 14
-};
-
 //--------------------------------------------------------------------------------------
 // Constant Buffers
 //--------------------------------------------------------------------------------------
+
 cbuffer CB
 {
 	uint _Level;
@@ -37,6 +33,7 @@ cbuffer CB
 //--------------------------------------------------------------------------------------
 // Structured Buffers
 //--------------------------------------------------------------------------------------
+
 StructuredBuffer  <ComputeShaderInputData> Input;
 RWStructuredBuffer<ComputeShaderInputData> Data;
 

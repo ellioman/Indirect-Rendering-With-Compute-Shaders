@@ -15,7 +15,7 @@ Shader "HiZ/BufferGenerate"
             #pragma target 4.5
             #pragma vertex vertex
             #pragma fragment blit
-            #include "HiZInclude.cginc"
+            #include "ShaderInclude_HiZ.cginc"
             ENDCG
         }
 
@@ -25,7 +25,7 @@ Shader "HiZ/BufferGenerate"
             #pragma target 4.5
             #pragma vertex vertex
             #pragma fragment reduce
-            #include "HiZInclude.cginc"
+            #include "ShaderInclude_HiZ.cginc"
             ENDCG
         }
     }
@@ -40,7 +40,7 @@ Shader "HiZ/BufferGenerate"
             #pragma target 4.6
             #pragma vertex vertex
             #pragma fragment blit
-            #include "HiZInclude.cginc"
+            #include "ShaderInclude_HiZ.cginc"
             ENDCG
         }
 
@@ -50,7 +50,7 @@ Shader "HiZ/BufferGenerate"
             #pragma target 4.6
             #pragma vertex vertex
             #pragma fragment reduce
-            #include "HiZInclude.cginc"
+            #include "ShaderInclude_HiZ.cginc"
             ENDCG
         }
     }
