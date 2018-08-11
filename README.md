@@ -1,11 +1,12 @@
 Indirect Rendering With Compute Shaders
 ========
 
+An example of drawing numerous instances in Unity3D using Compute shaders and Graphics.DrawMeshInstancedIndirect.
 
 ![Generative](https://78.media.tumblr.com/e2c8a6e91a514f665bc7d6f7caffd5fa/tumblr_pcnjegbIVN1sokf58o1_500.gif)
 
-
-An example of drawing numerous instances in Unity3D using Compute shaders and Graphics.DrawMeshInstancedIndirect.
+##Note
+This project has only been tested on a Macbook Pro using Metal. It is very likely you need to add the arguments buffer into the instance rendering shader and add the offset to unity_InstanceID to get the correct instance when using DirectX.
 
 ## Features
 
