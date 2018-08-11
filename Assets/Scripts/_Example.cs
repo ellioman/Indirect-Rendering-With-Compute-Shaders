@@ -41,6 +41,7 @@ public class _Example : MonoBehaviour
 		indirectRenderer.Initialize();
 	}
 
+		List<Vector3> spawnedPositions;
 	private void InitializeData()
 	{
 		if (instances.Count == 0)
@@ -49,6 +50,7 @@ public class _Example : MonoBehaviour
 			return;
 		}
 
+		spawnedPositions = new List<Vector3>((int) numberOfInstances);
 		int numOfInstancesPerType = ((int) numberOfInstances) / instances.Count;
 		float areaSize = 2500;
 		for (int i = 0; i < instances.Count; i++)
@@ -57,13 +59,35 @@ public class _Example : MonoBehaviour
 			instances[i].rotations = new Vector3[numOfInstancesPerType];
 			instances[i].uniformScales = new float[numOfInstancesPerType];
 
+			Vector3 pos;
 			for (int k = 0; k < numOfInstancesPerType; k++)
 			{
-				instances[i].positions[k] = new Vector3(Random.Range(-areaSize, areaSize), 55f, Random.Range(-areaSize, areaSize));
+				int count = 0;
+				do
+				{
+					pos = new Vector3(Random.Range(-areaSize, areaSize), 55f, Random.Range(-areaSize, areaSize));
+					count++;
+				}
+				while(!IsPositionAllowed(pos) && count < 10);
+
+				spawnedPositions.Add(pos);
+				instances[i].positions[k]  = pos;
 				instances[i].rotations[k] = new Vector3(0f, 0f, 0f);
 				instances[i].uniformScales[k] = Random.Range(scaleRange.x, scaleRange.y);
 			}
 		}
+	}
+
+	private bool IsPositionAllowed(Vector3 pos)
+	{
+		for (int i = 0; i < spawnedPositions.Count; i++)
+		{
+			if (Vector3.Distance(spawnedPositions[i], pos) < 50f)
+			{
+				return false;
+			}
+		}
+		return true;
 	}
 
 	#endregion

@@ -41,9 +41,7 @@ Varyings vertex(in Input i)
 
 float4 blit(in Varyings input) : SV_Target
 {
-    // return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, input.uv).z; 
-    const float MULTIPLIER = 1.8; // TODO: Find out why the hell I need this multiplier!
-    return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, input.uv).r * MULTIPLIER; 
+    return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, input.uv).r; 
 }
 
 float4 reduce(in Varyings input) : SV_Target

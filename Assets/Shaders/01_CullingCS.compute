@@ -18,10 +18,6 @@
 #define THREAD_GROUP_SIZE_Y 1
 #define THREAD_GROUP_SIZE_Z 1
 
-#define SHOULD_FRUSTUM_CULL 1
-#define SHOULD_OCCLUSION_CULL 1
-#define SHOULD_LOD 1
-
 #define LOD00_RANGE 500
 #define LOD01_RANGE 1500
 
@@ -31,6 +27,9 @@
 
 cbuffer CB
 {
+	bool _ShouldFrustumCull;
+	bool _ShouldOcclusionCull;
+	bool _ShouldLOD;
 	float _ShadowCullingLength;
 	float2 _HiZTextureSize;
 	float3 _CamFarCenter;
@@ -84,21 +83,23 @@ inline void CalculateClipMinAndMax(in BoundingBox boxCorners, inout float3 clipm
 	boxCorners.corners[6] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[6]);
 	boxCorners.corners[7] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[7]);
 	
-	clipmin = 1.0;
-	clipmax = 0.0;
+	
+	clipmin = float3(1.0, 1.0, 1.0);
+	clipmax = float3(0.0, 0.0, 0.0);
 	for (int n = 0; n < 8; n++)
 	{
 		float4 clipPos = boxCorners.corners[n] / boxCorners.corners[n].w;
+
         clipPos.xy = clipPos.xy * float2(0.5, 0.5) + float2(0.5, 0.5);
 		clipPos.z = 1.0 - clipPos.z;
 		
 		clipmin.x = min(clipmin.x, clipPos.x);
 		clipmin.y = min(clipmin.y, clipPos.y);
-		clipmin.z = saturate(min(clipmin.z, clipPos.z));
+		clipmin.z = min(clipmin.z, clipPos.z);
 
 		clipmax.x = max(clipmax.x, clipPos.x);
 		clipmax.y = max(clipmax.y, clipPos.y);
-		clipmax.z = saturate(max(clipmax.z, clipPos.z));
+		clipmax.z = max(clipmax.z, clipPos.z);
 	}
 }
 
@@ -106,9 +107,9 @@ inline void CalculateClipMinAndMax(in BoundingBox boxCorners, inout float3 clipm
 // http://rastergrid.com/blog/2010/10/hierarchical-z-map-based-occlusion-culling/
 // https://github.com/nvpro-samples/gl_occlusion_culling
 // http://blog.selfshadow.com/publications/practical-visibility/
-inline bool ShouldHiZCull(float3 position, BoundingBox boundingBox)
+inline bool ShouldHiZCull(ComputeShaderInputData instance, float3 position, BoundingBox boundingBox)
 {
-	if (SHOULD_OCCLUSION_CULL == false)
+	if (_ShouldOcclusionCull == false)
 	{
 		return false;
 	}
@@ -118,39 +119,18 @@ inline bool ShouldHiZCull(float3 position, BoundingBox boundingBox)
 	float3 clipmax;
 	CalculateClipMinAndMax(boundingBox, clipmin, clipmax);
 
-	// 
-	if (clipmax.z < 0.000001)
-	{
-		return true;
-	}
-
     // Hi-Z approach that allows for more samples.
     // https://www.gamedev.net/blogs/entry/2249535-hierarchical-z-buffer-occlusion-culling-updated-07152011/
-    const    int numSamples = 8;
-    const    int   xSamples = numSamples + 1;
-    const    int   ySamples = numSamples + 1;
-    const  float    widthSS = (clipmax.x - clipmin.x);
-	const  float   heightSS = (clipmax.y - clipmin.y);	
+    const  float    widthSS = abs(clipmax.x - clipmin.x);
+	const  float   heightSS = abs(clipmax.y - clipmin.y);	
     const  float  maxSizeSS = max(widthSS * _HiZTextureSize.x, heightSS * _HiZTextureSize.y);	
-    const  float        mip = max(0, ceil(log2(maxSizeSS)));	
-    const  float      stepX = widthSS / xSamples;	
-    const  float      stepY = heightSS / ySamples;	
-    const float2    bOffset = 0.5 / _HiZTextureSize;
+    const  float        mip = max(0, ceil(log2(maxSizeSS)));
     
-    float HIZdepth = 0;	
-    float yPos = clipmin.y;
-    for(int y = 0; y < ySamples; ++y)
-    {
-        float xPos = clipmin.x;
-        for(int x = 0; x < xSamples; ++x)
-        {
-            const float2 nCoords0 = float2(xPos, yPos);// + bOffset;
-            HIZdepth = max(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, nCoords0, mip).r);
-            xPos += stepX; 
-        }
-        yPos += stepY;	
-    }
-	return clipmin.z < HIZdepth;
+    float HIZdepth = 0.0;
+	HIZdepth = max(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, clipmin.xy, mip).r);
+	HIZdepth = min(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, clipmax.xy, mip).r);
+
+	return (clipmin.z <= HIZdepth);
 }
 
 inline void CalculateCameraPlanes(inout FrustumPlane mPlanes[6])
@@ -239,7 +219,7 @@ inline void CalculateCameraPlanes(inout FrustumPlane mPlanes[6])
 // http://www.iquilezles.org/www/articles/frustumcorrect/frustumcorrect.htm
 inline bool ShouldFrustumCull(BoundingBox box)
 {
-	if (SHOULD_FRUSTUM_CULL == false)
+	if (_ShouldFrustumCull == false)
 	{
 		return false;
 	}
@@ -285,25 +265,24 @@ inline bool ShouldFrustumCull(BoundingBox box)
 	return false;
 }
 
-
-
 // Assign LOD Level
 inline void AssignLod(ComputeShaderInputData instance, float camDist, uint tID)
 {
-	if (camDist < LOD00_RANGE)
+	if (_ShouldLOD == false)
+	{
+		InterlockedAdd(argsBuffer[instance.drawCallID + 11], 1);
+	}
+	else if (camDist < LOD00_RANGE)
 	{
 		InterlockedAdd(argsBuffer[instance.drawCallID + 1], 1);
-		_IsVisibleBuffer[tID] = 1;
 	}
 	else if (camDist < LOD01_RANGE)
 	{
 		InterlockedAdd(argsBuffer[instance.drawCallID + 6], 1);
-		_IsVisibleBuffer[tID] = 1;
 	}
 	else
 	{
 		InterlockedAdd(argsBuffer[instance.drawCallID + 11], 1);
-		_IsVisibleBuffer[tID] = 1;
 	}
 }
 
@@ -345,11 +324,12 @@ inline void CSMain (
 	}
 
 	// Occlusion Culling
-	if (ShouldHiZCull(instance.position, boundingBox))
+	if (ShouldHiZCull(instance, instance.position, boundingBox))
 	{
 		return;
 	}
 	
 	// LOD
+	_IsVisibleBuffer[tID] = 1;
 	AssignLod(instance, instance.distanceToCamera, tID);
 }

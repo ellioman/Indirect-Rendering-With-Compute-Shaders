@@ -49,6 +49,17 @@ public partial class IndirectRenderer : MonoBehaviour
             return;
         }
 
+        // if (instancesPositionsArray != null)
+        // {
+        //     Gizmos.color = new Color(1,1,1, 0.25f);
+        //     for (int i = 0; i < instancesPositionsArray.Length; i++)
+        //     {
+        //         Gizmos.DrawWireCube(
+        //             instancesPositionsArray[i].position, 
+        //             instancesPositionsArray[i].boundsExtents * 2f);
+        //     }
+        // }
+
         CalculateCameraFrustum(ref m_camera);
         
         Gizmos.color = Color.green;

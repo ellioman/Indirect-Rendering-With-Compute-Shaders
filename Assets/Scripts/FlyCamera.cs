@@ -4,7 +4,6 @@ using UnityEngine.EventSystems;
 
 public class FlyCamera : MonoBehaviour
 {
-	public Terrain terrain;
 	public EventSystem eventSystem;
 
 	/**
@@ -18,6 +17,7 @@ public class FlyCamera : MonoBehaviour
 	 * space : Moves camera on X and Z axis only.  So camera doesn't gain any height
 	 */
 
+	public bool lockXRotation = false;
 	public float minSpeed = 0.5f;
 	public float mainSpeed = 10f; // Regular speed.
 	public float shiftMultiplier = 2f;  // Multiplied by how long shift is held.  Basically running.
@@ -27,19 +27,29 @@ public class FlyCamera : MonoBehaviour
 	private float totalRun = 1.0f;
 
 	public bool clickToMove = true;
-	public bool keepItAboveTerrain = true;
 	public float unitsAboveTerrain = 4f;
+
+	public bool isFrozen = false;
+
+
+	public void ToggleFreeze()
+	{
+		isFrozen = !isFrozen;
+	}
 
 	void Start()
 	{
-		// Get terrain reference		
-        terrain = Terrain.activeTerrain;
         eventSystem = EventSystem.current;
 	}
 
 
-	void FixedUpdate()
+	void Update()
 	{
+		if (isFrozen)
+		{
+			return;
+		}
+
 		// This should prevent the mouse input from getting through the UI.
 		//if (eventSystem.IsPointerOverGameObject() && !dragging)
 		//	return;
@@ -102,16 +112,12 @@ public class FlyCamera : MonoBehaviour
 			transform.Translate(p);
 		}
 
-		if (keepItAboveTerrain)
+		if (lockXRotation)
 		{
-			// Keep it above terrain
-			newPosition = transform.position;
-			newPosition.y = terrain.SampleHeight(newPosition) + terrain.transform.position.y + unitsAboveTerrain;
-			if (transform.position.y <= newPosition.y)
-				transform.position = newPosition;
+			Vector3 euler = transform.localRotation.eulerAngles;
+			euler.x = 0f;
+			transform.localRotation = Quaternion.Euler(euler);
 		}
-
-
 	}
 
 	private Vector3 getDirection()

@@ -59,7 +59,6 @@ public partial class IndirectRenderer : MonoBehaviour
     
     [Header("Settings")]
     [Space(10f)]
-	public bool useCPUSorting = false;
 	[Range(0f, 500f)] public float m_cameraDistanceSorting = 250f;
 	public bool m_receiveShadows = true;
     [Range(0f, 500f)] public float m_shadowCullingLength = 250f;
@@ -78,9 +77,13 @@ public partial class IndirectRenderer : MonoBehaviour
 
     [Header("Debug")]
     [Space(10f)]
+	public bool m_useCPUSorting = false;
+	public bool m_enableFrustumCulling = true;
+	public bool m_enableOcclusionCulling = true;
+	public bool m_enableLOD = true;
+	public bool m_showLOD = false;
 	public DebugStop m_debugStop = DebugStop.DontStop;
 	public DebugLog m_debugLog = DebugLog.DontLog;
-	public bool m_showLOD = false;
     public bool m_showHiZTexture = false;
     [SerializeField] [Range(0, 16)] private int m_hiZTextureLodLevel = 0;
 
@@ -109,7 +112,6 @@ public partial class IndirectRenderer : MonoBehaviour
 	// Other
 	private int m_numberOfInstances = 0;
 	private uint[] m_args = null;
-	private Vector3 lastCamPos = Vector3.zero;
     private Bounds m_drawBounds = new Bounds();
 	private Vector3 m_camPosition = Vector3.zero;
 	private Vector3 m_camNearCenter = Vector3.zero;
@@ -163,13 +165,13 @@ public partial class IndirectRenderer : MonoBehaviour
 
 		for (int i = 0; i < m_renderers.Count; i++)
 		{
-			m_renderers[i].Lod00MatPropBlock.SetFloat("_ShowLOD", m_showLOD ? 1f : 0f);
-			m_renderers[i].Lod01MatPropBlock.SetFloat("_ShowLOD", m_showLOD ? 1f : 0f);
-			m_renderers[i].Lod02MatPropBlock.SetFloat("_ShowLOD", m_showLOD ? 1f : 0f);
+			m_renderers[i].Lod00MatPropBlock.SetColor("_Color", m_showLOD ? Color.red : Color.yellow);
+			m_renderers[i].Lod01MatPropBlock.SetColor("_Color", m_showLOD ? Color.green : Color.yellow);
+			m_renderers[i].Lod02MatPropBlock.SetColor("_Color", m_showLOD ? Color.blue : Color.yellow);
 		}
 	}
 
-	private void LateUpdate()//OnPreCull()
+	private void OnPreCull()
 	{
 		if (m_renderers == null
             || m_renderers.Count == 0
@@ -187,7 +189,6 @@ public partial class IndirectRenderer : MonoBehaviour
 			for (int i = 0; i < m_renderers.Count; i++)
 			{
 				IndirectRenderingMesh irm = m_renderers[i];
-
 				Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_drawBounds, m_argsBuffer, (i * 60) + 00, irm.Lod00MatPropBlock, m_shadowCastingMode, m_receiveShadows);
 				Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_drawBounds, m_argsBuffer, (i * 60) + 20, irm.Lod01MatPropBlock, m_shadowCastingMode, m_receiveShadows);
 				Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_drawBounds, m_argsBuffer, (i * 60) + 40, irm.Lod02MatPropBlock, m_shadowCastingMode, m_receiveShadows);	
@@ -209,7 +210,7 @@ public partial class IndirectRenderer : MonoBehaviour
     }
 
     #endregion
-
+	
     #region Private Functions
     private void RunCompute()
 	{
@@ -247,19 +248,15 @@ public partial class IndirectRenderer : MonoBehaviour
 		//////////////////////////////////////////////////////
 		Profiler.BeginSample("00 LOD Sorting");
 		{
-			if (Vector3.Distance(m_camPosition, lastCamPos) > m_cameraDistanceSorting)
-			{	
-				lastCamPos = m_camPosition;
-				if (useCPUSorting)
-				{
-					RunCPUSorting(ref m_camNearCenter);
-				}
-				else 
-				{
-					RunGPUSorting(ref m_camNearCenter);
-				}
-				Log00Sorting();
+			if (m_useCPUSorting)
+			{
+				RunCPUSorting(ref m_camNearCenter);
 			}
+			else 
+			{
+				RunGPUSorting(ref m_camNearCenter);
+			}
+			Log00Sorting();
 		}
 		Profiler.EndSample();
 		
@@ -274,6 +271,9 @@ public partial class IndirectRenderer : MonoBehaviour
 		Profiler.BeginSample("01 Occlusion");
 		{
 			// Input
+			m_01_occlusionCS.SetBool("_ShouldFrustumCull", m_enableFrustumCulling);
+			m_01_occlusionCS.SetBool("_ShouldOcclusionCull", m_enableOcclusionCulling);
+			m_01_occlusionCS.SetBool("_ShouldLOD", m_enableLOD);
 			m_01_occlusionCS.SetFloat("_ShadowCullingLength", m_shadowCullingLength);
 			m_01_occlusionCS.SetMatrix("_UNITY_MATRIX_MVP", m_MVP);
 			m_01_occlusionCS.SetVector("_HiZTextureSize", m_hiZBuffer.textureSize);
@@ -543,7 +543,7 @@ public partial class IndirectRenderer : MonoBehaviour
         Matrix4x4 M = m_camera.transform.localToWorldMatrix;
         Matrix4x4 V = m_camera.worldToCameraMatrix;
         Matrix4x4 P = m_camera.projectionMatrix;
-        m_MVP = P*V;//*M;
+        m_MVP = P * V;//*M;
 		
 		// Left clipping plane.
 		m_cameraFrustumPlanes[0] = new Vector4( m_MVP[3]+m_MVP[0], m_MVP[7]+m_MVP[4], m_MVP[11]+m_MVP[8], m_MVP[15]+m_MVP[12] );
@@ -573,6 +573,36 @@ public partial class IndirectRenderer : MonoBehaviour
     #endregion
 
     #region Public Functions
+
+	public void ToggleCPUGPUSorting()
+	{
+		m_useCPUSorting = !m_useCPUSorting;
+	}
+
+	public void ToggleHiZ()
+	{
+		m_showHiZTexture = !m_showHiZTexture;
+	}
+
+	public void ToggleFrustumCulling()
+	{
+		m_enableFrustumCulling = !m_enableFrustumCulling;
+	}
+
+	public void ToggleOcclusionCulling()
+	{
+		m_enableOcclusionCulling = !m_enableOcclusionCulling;
+	}
+
+	public void ToggleEnableLOD()
+	{
+		m_enableLOD = !m_enableLOD;
+	}
+
+	public void ToggleShowLOD()
+	{
+		m_showLOD = !m_showLOD;
+	}
 
     public void AddInstances(List<IndirectInstanceData> _instances)
     {
@@ -655,10 +685,6 @@ public partial class IndirectRenderer : MonoBehaviour
             irm.Lod01MatPropBlock.SetBuffer("positionBuffer", m_culledInstanceBuffer);
             irm.Lod02MatPropBlock.SetBuffer("positionBuffer", m_culledInstanceBuffer);
 
-            irm.Lod00MatPropBlock.SetColor("_Color", Color.red);
-            irm.Lod01MatPropBlock.SetColor("_Color", Color.green);
-            irm.Lod02MatPropBlock.SetColor("_Color", Color.blue);
-
             irm.material = new Material(data.material);
 
 			// Add the instance data (positions, rotations, scaling, bounds...)
@@ -672,14 +698,14 @@ public partial class IndirectRenderer : MonoBehaviour
 				b.Encapsulate(_data.lod00Mesh.bounds);
 				b.Encapsulate(_data.lod01Mesh.bounds);
 				b.Encapsulate(_data.lod02Mesh.bounds);
-				b.extents *= _data.uniformScales[j];
+				// b.extents *= _data.uniformScales[j];
 
 				newData.drawCallID = (uint) i * NUMBER_OF_ARGS_PER_INSTANCE;
 				newData.position = _data.positions[j];
 				newData.rotation = _data.rotations[j];
 				newData.uniformScale = _data.uniformScales[j];
 				newData.boundsCenter = _data.positions[j];
-				newData.boundsExtents = b.extents;
+				newData.boundsExtents = b.extents * 0.5f;
 				newData.distanceToCamera = Vector3.Distance(newData.position, m_camera.transform.position);
 
 				irm.computeInstances.Add(newData);

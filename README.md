@@ -12,10 +12,10 @@ An example of drawing numerous instances in Unity3D using Compute shaders and Gr
 - Use compute buffers and compute shaders
 - Draw things using Graphics.DrawMeshInstancedIndirect
 - GPU Sorting with Bitonic sorting
-- Frustum culling in a compute shader
-- Occlusion culling with HierarchicalZBuffer in a compute shader
+- Compute shader: Frustum culling
+- Compute shader: Occlusion culling with HierarchicalZBuffer
+- Compute shader: LOD objects using the distance from camera to object
 - Extending camera frustum towards light to include shadow casting objects
-- LOD objects using the distance from camera to object
 
 ## Project Setup
 - "_Example.cs" script on the "Example" game object:
@@ -26,13 +26,11 @@ An example of drawing numerous instances in Unity3D using Compute shaders and Gr
 	- Creates a hierarchial Z-Buffer texture that is used when doing occlusion culling.
 
 ## TODO
-- Hi-Z Culling not working properly at the moment. Bounds do not seem to be correct for objects.
 - Improve the instance sorting:
 	- On my Macbook pro (mid 2014) sorting takes approx 50% of the GPU time
 	- The GPU sorting must support instance numbers that are not in the non power of two (right now I'm padding the data to become POT)
 	- Find a better performant approach for the CPU Sorting
 - Try to make the compute buffers smaller in size. Ex: Pack the three floats, used for bounds size, into one uint.
-- Find out why I need the 1.8 multiplier for the _CameraDepthTexture.Sample(...) (ShaderInclude_HiZ.cginc)
 - Try out Raster Occlusion instead of Hi-Z (See "NVidia Siggraph 2014" & "Github - nvpro-samples" below)
 
 
