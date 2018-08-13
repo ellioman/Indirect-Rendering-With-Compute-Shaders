@@ -41,7 +41,7 @@ Varyings vertex(in Input i)
 
 float4 blit(in Varyings input) : SV_Target
 {
-    return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, input.uv).r; 
+    return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, input.uv).r * 1.8;
 }
 
 float4 reduce(in Varyings input) : SV_Target

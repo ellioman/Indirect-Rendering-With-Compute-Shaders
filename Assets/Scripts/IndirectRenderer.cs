@@ -59,7 +59,6 @@ public partial class IndirectRenderer : MonoBehaviour
     
     [Header("Settings")]
     [Space(10f)]
-	[Range(0f, 500f)] public float m_cameraDistanceSorting = 250f;
 	public bool m_receiveShadows = true;
     [Range(0f, 500f)] public float m_shadowCullingLength = 250f;
     public ShadowCastingMode m_shadowCastingMode;
@@ -77,6 +76,7 @@ public partial class IndirectRenderer : MonoBehaviour
 
     [Header("Debug")]
     [Space(10f)]
+	public UnityEngine.UI.Slider slider;
 	public bool m_useCPUSorting = false;
 	public bool m_enableFrustumCulling = true;
 	public bool m_enableOcclusionCulling = true;
@@ -97,7 +97,6 @@ public partial class IndirectRenderer : MonoBehaviour
 	private ComputeBuffer m_scannedInstancePredicates = null;
 	private ComputeBuffer m_positionsBuffer = null;
 	private ComputeBuffer m_culledInstanceBuffer = null;
-	// private ComputeBuffer m_culledDrawcallIDBuffer = null;
 	private ComputeBuffer m_argsBuffer = null;
 
     // Kernel ID's
@@ -206,7 +205,6 @@ public partial class IndirectRenderer : MonoBehaviour
 		if (m_groupSumArray != null) { m_groupSumArray.Release(); }
 		if (m_scannedGroupSumBuffer != null) { m_scannedGroupSumBuffer.Release(); }
 		if (m_scannedInstancePredicates != null) { m_scannedInstancePredicates.Release(); }
-		// if (m_culledDrawcallIDBuffer != null) { m_culledDrawcallIDBuffer.Release(); }
     }
 
     #endregion
@@ -367,7 +365,6 @@ public partial class IndirectRenderer : MonoBehaviour
 
 			// Output
 			m_04_copyInstanceDataCS.SetBuffer(m_04_copyInstanceDataKernelID, "instanceDataOut", m_culledInstanceBuffer);
-			// m_04_copyInstanceDataCS.SetBuffer(m_04_copyInstanceDataKernelID, "drawcallIDDataOut", m_culledDrawcallIDBuffer);
 
 			// Dispatch
 			int groupX = m_numberOfInstances / (2 * scanThreadGroupSize);
@@ -604,6 +601,11 @@ public partial class IndirectRenderer : MonoBehaviour
 		m_showLOD = !m_showLOD;
 	}
 
+	public void UpdateShadowCullingLength()
+	{
+		m_shadowCullingLength = slider.value;
+	}
+
     public void AddInstances(List<IndirectInstanceData> _instances)
     {
         m_instances.AddRange(_instances);
@@ -756,7 +758,6 @@ public partial class IndirectRenderer : MonoBehaviour
 		m_scannedInstancePredicates = new ComputeBuffer(m_numberOfInstances, sizeof(uint), ComputeBufferType.Default);
 		m_groupSumArray 			= new ComputeBuffer(m_numberOfInstances, sizeof(uint), ComputeBufferType.Default);
 		m_scannedGroupSumBuffer 	= new ComputeBuffer(m_numberOfInstances, sizeof(uint), ComputeBufferType.Default);
-		// m_culledDrawcallIDBuffer 	= new ComputeBuffer(m_numberOfInstances, sizeof(uint), ComputeBufferType.Default);
 
 		m_argsBuffer.SetData(m_args);
 		m_positionsBuffer.SetData(instancesPositionsArray);
@@ -895,15 +896,6 @@ public partial class IndirectRenderer : MonoBehaviour
 			sb.AppendLine(i + ": " + culledInstancesData[i].position + " " + culledInstancesData[i].rotation + ": " + culledInstancesData[i].uniformScale);
 		}
 		Debug.Log(sb.ToString());
-
-		// uint[] drawcallIDData = new uint[m_totalNumOfInstances];
-		// m_culledDrawcallIDBuffer.GetData(drawcallIDData);
-		// string drawcallIDText = "04 drawcallIDData:\n";
-		// for (int i = 0; i < drawcallIDData.Length; i++)
-		// {
-		// 	drawcallIDText += i + ": " + drawcallIDData[i] + "\n";
-		// }
-		// Debug.Log(drawcallIDText);
 	}
 
 	private void Log05CalculateInstanceOffsets()

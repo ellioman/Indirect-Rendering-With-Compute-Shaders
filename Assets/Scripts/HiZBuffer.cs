@@ -78,13 +78,16 @@ public class HiZBuffer : MonoBehaviour
     {
         int size = (int) Mathf.Max((float) m_camera.pixelWidth, (float) m_camera.pixelHeight);
         size = (int) Mathf.Min((float) Mathf.NextPowerOfTwo(size), (float) MAXIMUM_BUFFER_SIZE);
-        textureSize = new Vector2(size,size);
+        textureSize.x = size;
+        textureSize.y = size;
         m_LODCount = (int) Mathf.Floor(Mathf.Log(size, 2f));
 
         bool isCommandBufferInvalid = false;
 
         if (m_LODCount == 0)
+        {
             return;
+        }
 
         if (m_HiZDepthTexture == null 
             || (m_HiZDepthTexture.width != size
@@ -93,7 +96,9 @@ public class HiZBuffer : MonoBehaviour
             )
         {
             if (m_HiZDepthTexture != null)
+            {
                 m_HiZDepthTexture.Release();
+            }
 
             m_HiZDepthTexture = new RenderTexture(size, size, 0, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
             m_HiZDepthTexture.filterMode = FilterMode.Point;
@@ -115,7 +120,9 @@ public class HiZBuffer : MonoBehaviour
             m_Temporaries = new int[m_LODCount];
 
             if (m_CommandBuffer != null)
+            {
                 m_camera.RemoveCommandBuffer(m_CameraEvent, m_CommandBuffer);
+            }
 
             m_CommandBuffer = new CommandBuffer();
             m_CommandBuffer.name = "Hi-Z Buffer";
@@ -131,19 +138,27 @@ public class HiZBuffer : MonoBehaviour
                 size >>= 1;
 
                 if (size == 0)
+                {
                     size = 1;
+                }
 
                 m_CommandBuffer.GetTemporaryRT(m_Temporaries[i], size, size, 0, FilterMode.Point, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
 
                 if (i == 0)
+                {
                     m_CommandBuffer.Blit(id, m_Temporaries[0], m_generateBufferMaterial, (int) Pass.Reduce);
+                }
                 else
+                {
                     m_CommandBuffer.Blit(m_Temporaries[i - 1], m_Temporaries[i], m_generateBufferMaterial, (int) Pass.Reduce);
+                }
 
                 m_CommandBuffer.CopyTexture(m_Temporaries[i], 0, 0, id, 0, i + 1);
 
                 if (i >= 1)
+                {
                     m_CommandBuffer.ReleaseTemporaryRT(m_Temporaries[i - 1]);
+                }
             }
 
             m_CommandBuffer.ReleaseTemporaryRT(m_Temporaries[m_LODCount - 1]);

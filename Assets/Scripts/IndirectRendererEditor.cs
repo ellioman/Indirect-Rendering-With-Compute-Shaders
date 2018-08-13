@@ -63,12 +63,13 @@ public partial class IndirectRenderer : MonoBehaviour
         CalculateCameraFrustum(ref m_camera);
         
         Gizmos.color = Color.green;
-        Gizmos.DrawLine(m_camera.transform.position, m_camera.transform.position + m_camera.transform.forward * m_camera.farClipPlane);
+        // Gizmos.DrawLine(m_camera.transform.position, m_camera.transform.position + m_camera.transform.forward * m_camera.farClipPlane);
 
         for(int i = 0; i < m_frustumPlanes.Length; i++)
         {
             bool ifFacingAway = !AreDirectionsFacingEachother(m_frustumPlanes[i].normal, m_light.transform.forward);
             Color c = ifFacingAway ? Color.green : Color.red;
+            c = Color.green;
             if (ifFacingAway) {
                 Vector3 change = -m_light.transform.forward * m_shadowCullingLength;
                 m_frustumPlanes[i].pointOnPlane += change;

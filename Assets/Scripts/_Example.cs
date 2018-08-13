@@ -9,7 +9,7 @@ public class _Example : MonoBehaviour
 
 	// Public
 	public Vector2 scaleRange = new Vector2();
-	public Transform prefab;
+	// public Transform prefab;
 	public NumberOfInstances numberOfInstances;
 	public IndirectRenderer indirectRenderer;
 	public List<IndirectInstanceData> instances = new List<IndirectInstanceData>();
@@ -53,6 +53,8 @@ public class _Example : MonoBehaviour
 		spawnedPositions = new List<Vector3>((int) numberOfInstances);
 		int numOfInstancesPerType = ((int) numberOfInstances) / instances.Count;
 		float areaSize = 2500;
+		float allowedDistance = areaSize / ((int) numberOfInstances);
+		Debug.Log(allowedDistance);
 		for (int i = 0; i < instances.Count; i++)
 		{
 			instances[i].positions = new Vector3[numOfInstancesPerType];
@@ -68,7 +70,7 @@ public class _Example : MonoBehaviour
 					pos = new Vector3(Random.Range(-areaSize, areaSize), 55f, Random.Range(-areaSize, areaSize));
 					count++;
 				}
-				while(!IsPositionAllowed(pos) && count < 10);
+				while(!IsPositionAllowed(allowedDistance, pos) && count < 10);
 
 				spawnedPositions.Add(pos);
 				instances[i].positions[k]  = pos;
@@ -78,11 +80,11 @@ public class _Example : MonoBehaviour
 		}
 	}
 
-	private bool IsPositionAllowed(Vector3 pos)
+	private bool IsPositionAllowed(float allowedDistance, Vector3 pos)
 	{
 		for (int i = 0; i < spawnedPositions.Count; i++)
 		{
-			if (Vector3.Distance(spawnedPositions[i], pos) < 50f)
+			if (Vector3.Distance(spawnedPositions[i], pos) < allowedDistance)
 			{
 				return false;
 			}
@@ -94,37 +96,37 @@ public class _Example : MonoBehaviour
 
 	#region Public Functions
 
-	public void InstantiatePrefabs()
-	{
-		DestroyInstances(PARENT_OBJ_NAME);
+	// public void InstantiatePrefabs()
+	// {
+	// 	DestroyInstances(PARENT_OBJ_NAME);
+	// 	InitializeData();
+	// 	Transform parent = new GameObject(PARENT_OBJ_NAME).transform;
+	// 	parent.position = Vector3.zero;
+	// 	parent.localScale = Vector3.one;
+	// 	parent.rotation = Quaternion.identity;
 
-		Transform parent = new GameObject(PARENT_OBJ_NAME).transform;
-		parent.position = Vector3.zero;
-		parent.localScale = Vector3.one;
-		parent.rotation = Quaternion.identity;
+	// 	for (int i = 0; i < instances.Count; i++)
+	// 	{
+	// 		Vector3[] positions = instances[i].positions;
+	// 		for (int k = 0; k < positions.Length; k++)
+	// 		{
+	// 			Transform t = Instantiate(prefab);
+	// 			t.parent = parent;
+	// 			t.localPosition = positions[k];
+	// 			t.rotation = Quaternion.Euler(instances[i].rotations[k]);
+	// 			t.localScale = Vector3.one * instances[i].uniformScales[k];
+	// 		}
+	// 	}
+	// }
 
-		for (int i = 0; i < instances.Count; i++)
-		{
-			Vector3[] positions = instances[i].positions;
-			for (int k = 0; k < positions.Length; k++)
-			{
-				Transform t = Instantiate(prefab);
-				t.parent = parent;
-				t.localPosition = positions[k];
-				t.rotation = Quaternion.Euler(instances[i].rotations[k]);
-				t.localScale = Vector3.one * instances[i].uniformScales[k];
-			}
-		}
-	}
-
-	public void DestroyInstances(string parentName)
-	{
-		GameObject obj = GameObject.Find(parentName);
-		if (obj != null)
-		{
-			DestroyImmediate(obj);
-		}
-	}
+	// public void DestroyInstances(string parentName)
+	// {
+	// 	GameObject obj = GameObject.Find(parentName);
+	// 	if (obj != null)
+	// 	{
+	// 		DestroyImmediate(obj);
+	// 	}
+	// }
 
 	#endregion
 }

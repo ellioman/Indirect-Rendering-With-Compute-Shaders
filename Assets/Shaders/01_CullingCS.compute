@@ -72,41 +72,8 @@ inline void CalculateBoundingBoxCorners(in float3 center, in float3 extents, ino
 	boxCorners.corners[7] = float4(center + extents * float3( 1.0,  1.0,  1.0), 1.0);
 }
 
-inline void CalculateClipMinAndMax(in BoundingBox boxCorners, inout float3 clipmin, inout float3 clipmax)
-{
-	boxCorners.corners[0] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[0]);
-	boxCorners.corners[1] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[1]);
-	boxCorners.corners[2] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[2]);
-	boxCorners.corners[3] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[3]);
-	boxCorners.corners[4] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[4]);
-	boxCorners.corners[5] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[5]);
-	boxCorners.corners[6] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[6]);
-	boxCorners.corners[7] = mul(_UNITY_MATRIX_MVP, boxCorners.corners[7]);
-	
-	
-	clipmin = float3(1.0, 1.0, 1.0);
-	clipmax = float3(0.0, 0.0, 0.0);
-	for (int n = 0; n < 8; n++)
-	{
-		float4 clipPos = boxCorners.corners[n] / boxCorners.corners[n].w;
-
-        clipPos.xy = clipPos.xy * float2(0.5, 0.5) + float2(0.5, 0.5);
-		clipPos.z = 1.0 - clipPos.z;
-		
-		clipmin.x = min(clipmin.x, clipPos.x);
-		clipmin.y = min(clipmin.y, clipPos.y);
-		clipmin.z = min(clipmin.z, clipPos.z);
-
-		clipmax.x = max(clipmax.x, clipPos.x);
-		clipmax.y = max(clipmax.y, clipPos.y);
-		clipmax.z = max(clipmax.z, clipPos.z);
-	}
-}
-
 // Check Hi-Z Culling
-// http://rastergrid.com/blog/2010/10/hierarchical-z-map-based-occlusion-culling/
-// https://github.com/nvpro-samples/gl_occlusion_culling
-// http://blog.selfshadow.com/publications/practical-visibility/
+// https://interplayoflight.wordpress.com/2017/11/15/experiments-in-gpu-based-occlusion-culling/
 inline bool ShouldHiZCull(ComputeShaderInputData instance, float3 position, BoundingBox boundingBox)
 {
 	if (_ShouldOcclusionCull == false)
@@ -115,22 +82,62 @@ inline bool ShouldHiZCull(ComputeShaderInputData instance, float3 position, Boun
 	}
 
 	// Calculate the min and max positions of the instance bounds
-	float3 clipmin;
-	float3 clipmax;
-	CalculateClipMinAndMax(boundingBox, clipmin, clipmax);
+	float MaxMipLevel = 10;
+	float minZ = 1;
+	float2 minXY = 1;
+	float2 maxXY = 0;
 
-    // Hi-Z approach that allows for more samples.
-    // https://www.gamedev.net/blogs/entry/2249535-hierarchical-z-buffer-occlusion-culling-updated-07152011/
-    const  float    widthSS = abs(clipmax.x - clipmin.x);
-	const  float   heightSS = abs(clipmax.y - clipmin.y);	
-    const  float  maxSizeSS = max(widthSS * _HiZTextureSize.x, heightSS * _HiZTextureSize.y);	
-    const  float        mip = max(0, ceil(log2(maxSizeSS)));
-    
-    float HIZdepth = 0.0;
-	HIZdepth = max(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, clipmin.xy, mip).r);
-	HIZdepth = min(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, clipmax.xy, mip).r);
+	[unroll]
+	for (int i = 0; i < 8; i++)
+	{
+		//transform world space aaBox to NDC
+		float4 clipPos = mul(_UNITY_MATRIX_MVP, boundingBox.corners[i]);
+		clipPos.z = max(clipPos.z, 0);
+		
+		clipPos.xyz = clipPos.xyz / clipPos.w;
 
-	return (clipmin.z <= HIZdepth);
+		clipPos.z = 1.0 - clipPos.z;
+		clipPos.xy = clamp(clipPos.xy, -1, 1);
+		clipPos.xy = clipPos.xy * float2(0.5, 0.5) + float2(0.5, 0.5);
+
+		minXY = min(clipPos.xy, minXY);
+		maxXY = max(clipPos.xy, maxXY);
+
+		minZ = saturate(min(minZ, clipPos.z));
+	}
+	
+	float4 boxUVs = float4(minXY, maxXY);
+ 
+	// Calculate hi-Z buffer mip
+	int2 size = (maxXY - minXY) * _HiZTextureSize.xy;
+	float mip = ceil(log2(max(size.x, size.y)));
+	mip = clamp(mip, 0, MaxMipLevel);
+	
+	// Texel footprint for the lower (finer-grained) level
+	float  level_lower = max(mip - 1, 0);
+	float2 scale = exp2(-level_lower);
+	float2 a = floor(boxUVs.xy*scale);
+	float2 b = ceil(boxUVs.zw*scale);
+	float2 dims = b - a;
+
+	// Use the lower level if we only touch <= 2 texels in both dimensions
+	if (dims.x <= 2 && dims.y <= 2)
+	{
+		mip = level_lower;
+	}
+
+	// load depths from high z buffer
+	float4 depth = {
+		_HiZMap.SampleLevel(sampler_HiZMap, boxUVs.xy, mip).r,
+		_HiZMap.SampleLevel(sampler_HiZMap, boxUVs.zy, mip).r,
+		_HiZMap.SampleLevel(sampler_HiZMap, boxUVs.xw, mip).r,
+		_HiZMap.SampleLevel(sampler_HiZMap, boxUVs.zw, mip).r
+	};
+
+	// find the max depth
+	float maxDepth = min(min(min(depth.x, depth.y), depth.z), depth.w);
+	
+	return minZ <= maxDepth;
 }
 
 inline void CalculateCameraPlanes(inout FrustumPlane mPlanes[6])
