@@ -37,12 +37,12 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 	- Find a better performant approach for the CPU Sorting
 - Try to make the compute buffers smaller in size. Ex: Pack the three floats, used for bounds size, into one uint.
 - Try out Raster Occlusion instead of Hi-Z (See "NVidia Siggraph 2014" & "Github - nvpro-samples" below)
-
+- Try and profile structure buffers with structs divisible by 128 bits (sizeof float) => https://developer.nvidia.com/content/understanding-structured-buffer-performance
 
 ## Resources
 
 [Kostas Anagnostou - GPU Driven Rendering Experiments](http://bit.ly/Kostas-GPUDrivenRenderingExperiments)
-
+https://onedrive.live.com/view.aspx?resid=48825310AF038F63!142275&ithint=file%2cpptx&app=PowerPoint&authkey=!AD1BPt6859dRnoU
 [Kostas Anagnostou - Experiments in GPU-based occlusion culling](https://interplayoflight.wordpress.com/2017/11/15/experiments-in-gpu-based-occlusion-culling/)
 
 [Kostas Anagnostou - Experiments in GPU-based occlusion culling part 2](https://interplayoflight.wordpress.com/2018/01/15/experiments-in-gpu-based-occlusion-culling-part-2-multidrawindirect-and-mesh-lodding/)
