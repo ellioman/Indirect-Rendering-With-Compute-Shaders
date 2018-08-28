@@ -534,14 +534,14 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInternal: {fileID: 0}
   m_GameObject: {fileID: 374771437}
-  m_LocalRotation: {x: 0, y: -0.7489558, z: 0, w: 0.66262007}
-  m_LocalPosition: {x: 1203, y: 148.51, z: -106}
+  m_LocalRotation: {x: 0, y: -0.783482, z: 0, w: 0.6214144}
+  m_LocalPosition: {x: 1700, y: 200, z: 110}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children:
   - {fileID: 2087336923}
   m_Father: {fileID: 0}
   m_RootOrder: 1
-  m_LocalEulerAnglesHint: {x: 0, y: -97, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: -103.161, z: 0}
 --- !u!114 &374771443
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -554,7 +554,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   eventSystem: {fileID: 0}
-  lockXRotation: 1
+  lockXRotation: 0
   minSpeed: 500
   mainSpeed: 500
   shiftMultiplier: 2
@@ -1029,18 +1029,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 374771440}
-        m_MethodName: ToggleHiZ
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
-      - m_Target: {fileID: 374771443}
-        m_MethodName: ToggleFreeze
+        m_MethodName: ToggleShowHiZ
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -1927,8 +1916,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f83bf337e32e4ac88b8117a5a576944, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scaleRange: {x: 0.3, y: 0.6}
-  prefab: {fileID: 4102039171472948, guid: 1fa7141d6b0f746cca57ca62eab0dd7e, type: 2}
+  areaSize: 5000
+  scaleRange: {x: 0.2, y: 0.4}
   numberOfInstances: 8192
   indirectRenderer: {fileID: 374771440}
   instances:

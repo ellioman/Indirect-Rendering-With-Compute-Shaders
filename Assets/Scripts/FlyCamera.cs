@@ -31,12 +31,6 @@ public class FlyCamera : MonoBehaviour
 
 	public bool isFrozen = false;
 
-
-	public void ToggleFreeze()
-	{
-		isFrozen = !isFrozen;
-	}
-
 	void Start()
 	{
         eventSystem = EventSystem.current;

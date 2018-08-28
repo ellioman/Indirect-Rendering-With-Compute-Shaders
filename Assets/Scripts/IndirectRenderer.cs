@@ -576,7 +576,7 @@ public partial class IndirectRenderer : MonoBehaviour
 		m_useCPUSorting = !m_useCPUSorting;
 	}
 
-	public void ToggleHiZ()
+	public void ToggleShowHiZ()
 	{
 		m_showHiZTexture = !m_showHiZTexture;
 	}

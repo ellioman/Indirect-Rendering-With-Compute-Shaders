@@ -8,8 +8,8 @@ public class _Example : MonoBehaviour
 	#region Variables
 
 	// Public
+	public float areaSize = 5000f;
 	public Vector2 scaleRange = new Vector2();
-	// public Transform prefab;
 	public NumberOfInstances numberOfInstances;
 	public IndirectRenderer indirectRenderer;
 	public List<IndirectInstanceData> instances = new List<IndirectInstanceData>();
@@ -34,6 +34,18 @@ public class _Example : MonoBehaviour
 
 	#region MonoBehaviour
 
+
+	// Taken from:
+	// http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+	// https://www.shadertoy.com/view/4dtBWH
+	private Vector2 Nth_weyl(Vector2 p0, float n) {
+
+		Vector2 res = p0 + n * new Vector2(0.754877669f, 0.569840296f);
+		res.x %= 1;
+		res.y %= 1;
+		return res;
+	}
+
 	private void Start()
 	{
 		InitializeData();
@@ -41,7 +53,6 @@ public class _Example : MonoBehaviour
 		indirectRenderer.Initialize();
 	}
 
-		List<Vector3> spawnedPositions;
 	private void InitializeData()
 	{
 		if (instances.Count == 0)
@@ -50,46 +61,22 @@ public class _Example : MonoBehaviour
 			return;
 		}
 
-		spawnedPositions = new List<Vector3>((int) numberOfInstances);
 		int numOfInstancesPerType = ((int) numberOfInstances) / instances.Count;
-		float areaSize = 2500;
-		float allowedDistance = areaSize / ((int) numberOfInstances);
-		Debug.Log(allowedDistance);
+		int instanceCounter = 0;
 		for (int i = 0; i < instances.Count; i++)
 		{
 			instances[i].positions = new Vector3[numOfInstancesPerType];
 			instances[i].rotations = new Vector3[numOfInstancesPerType];
 			instances[i].uniformScales = new float[numOfInstancesPerType];
 
-			Vector3 pos;
 			for (int k = 0; k < numOfInstancesPerType; k++)
 			{
-				int count = 0;
-				do
-				{
-					pos = new Vector3(Random.Range(-areaSize, areaSize), 55f, Random.Range(-areaSize, areaSize));
-					count++;
-				}
-				while(!IsPositionAllowed(allowedDistance, pos) && count < 10);
-
-				spawnedPositions.Add(pos);
-				instances[i].positions[k]  = pos;
+				Vector2 pos = Nth_weyl(Vector2.zero, instanceCounter++) * areaSize;
+				instances[i].positions[k]  = new Vector3(pos.x - areaSize * 0.5f, 35f, pos.y - areaSize * 0.5f);
 				instances[i].rotations[k] = new Vector3(0f, 0f, 0f);
 				instances[i].uniformScales[k] = Random.Range(scaleRange.x, scaleRange.y);
 			}
 		}
-	}
-
-	private bool IsPositionAllowed(float allowedDistance, Vector3 pos)
-	{
-		for (int i = 0; i < spawnedPositions.Count; i++)
-		{
-			if (Vector3.Distance(spawnedPositions[i], pos) < allowedDistance)
-			{
-				return false;
-			}
-		}
-		return true;
 	}
 
 	#endregion
