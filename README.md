@@ -22,6 +22,7 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 - Compute shader: Occlusion culling with HierarchicalZBuffer
 - Compute shader: LOD objects using the distance from camera to object
 - Extending camera frustum towards light to include shadow casting objects
+- Use LOD02 mesh for all shadows
 
 ## Project Setup
 - "_Example.cs" script on the "Example" game object:
@@ -37,6 +38,7 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 	- The GPU sorting must support instance numbers that are not in the non power of two (right now I'm padding the data to become POT)
 	- Find a better performant approach for the CPU Sorting
 - Try to make the compute buffers smaller in size. Ex: Pack the three floats, used for bounds size, into one uint.
+- Create the Hi-Z Texture with compute shaders
 - Try out Raster Occlusion instead of Hi-Z (See "NVidia Siggraph 2014" & "Github - nvpro-samples" below)
 - Try and profile structure buffers with structs divisible by 128 bits (sizeof float) => https://developer.nvidia.com/content/understanding-structured-buffer-performance
 
