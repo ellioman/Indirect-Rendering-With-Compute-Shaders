@@ -5,6 +5,7 @@ Shader "IndirectRendering/Instance"
 		_MainTex ("Albedo (RGB)", 2D) = "white" {}
 		_Glossiness ("Smoothness", Range(0,1)) = 0.5
 		_Metallic ("Metallic", Range(0,1)) = 0.0
+		_MIPBIAS ("_MIPBIAS", float) = 0.0
 	}
 	
 	SubShader
@@ -22,7 +23,9 @@ Shader "IndirectRendering/Instance"
 
 			#include "ShaderInclude_IndirectStructs.cginc"
         	#pragma instancing_options procedural:setup
-			StructuredBuffer<OutputData> positionBuffer;
+			StructuredBuffer<InstanceDrawData> _InstanceDrawDataBuffer;
+			StructuredBuffer<uint> _ArgsBuffer;
+			int _ArgsOffset;
 
 			float4x4 rotationMatrix(float3 axis, float angle)
 			{
@@ -70,7 +73,13 @@ Shader "IndirectRendering/Instance"
 
 			void setup()
 			{
-				OutputData instance = positionBuffer[unity_InstanceID];
+				uint id = unity_InstanceID;
+
+				#if defined(SHADER_API_D3D11)
+				id += _ArgsBuffer[_ArgsOffset];
+				#endif
+
+				InstanceDrawData instance = _InstanceDrawDataBuffer[id];
 				float3 position = instance.position;
 				float scale = instance.uniformScale;
 
@@ -91,8 +100,6 @@ Shader "IndirectRendering/Instance"
 			}
         #endif
 
-
-
 		struct Input {
 			float2 uv_MainTex;
 		};
@@ -101,11 +108,18 @@ Shader "IndirectRendering/Instance"
 		half _Glossiness;
 		half _Metallic;
 		fixed4 _Color;
+
+		#if defined(SHADER_API_D3D11) || defined(SHADER_API_GLCORE)
+     		#define UNITY_LOD_TEX2D(tex,coord) tex.CalculateLevelOfDetail (sampler##tex,coord)
+		#else
+			// Just match the type i.e. define as a float value
+			#define UNITY_LOD_TEX2D(tex,coord) float(0)
+		#endif
 		
 		void surf(Input IN, inout SurfaceOutputStandard o) 
 		{
 			// Albedo comes from a texture tinted by color
-			fixed4 c = tex2D (_MainTex, IN.uv_MainTex) * _Color;
+			fixed4 c = tex2D(_MainTex, IN.uv_MainTex) * _Color;
 			o.Albedo = c.rgb;
 
 			// Metallic and smoothness come from slider variables

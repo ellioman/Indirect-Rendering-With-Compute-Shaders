@@ -2,7 +2,7 @@
 #ifndef __INDIRECT_INCLUDE__
 #define __INDIRECT_INCLUDE__
 
-struct ComputeShaderInputData
+struct InstanceData
 {
 	uint drawCallID;		// 1
 	float3 position; 		// 3
@@ -13,7 +13,7 @@ struct ComputeShaderInputData
 	float distanceToCamera; // 14
 };
 
-struct OutputData
+struct InstanceDrawData
 {
     float3 position;// 3
     float3 rotation;// 6

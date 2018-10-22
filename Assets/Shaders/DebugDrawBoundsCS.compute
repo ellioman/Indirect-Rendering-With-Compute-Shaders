@@ -1,0 +1,222 @@
+﻿#pragma kernel DrawBounds
+
+#include "UnityCG.cginc"
+#include "SimplexNoise3D.cginc"
+#include "../../Shaders/ShaderInclude_IndirectStructs.cginc"
+
+RWStructuredBuffer<InstanceData> _InstanceBuffer;
+RWStructuredBuffer<float4> _PositionBuffer;
+
+inline void CalculateBoundingBoxCorners(in float3 center, in float3 extents, inout BoundingBox boxCorners)
+{
+	boxCorners.center = center;
+	boxCorners.minPos = center - extents;
+	boxCorners.maxPos = center + extents;
+	boxCorners.corners[0] = float4(center + extents * float3(-1.0, -1.0, -1.0), 1.0);
+	boxCorners.corners[1] = float4(center + extents * float3(-1.0, -1.0,  1.0), 1.0);
+	boxCorners.corners[4] = float4(center + extents * float3( 1.0, -1.0, -1.0), 1.0);
+	boxCorners.corners[5] = float4(center + extents * float3( 1.0, -1.0,  1.0), 1.0);
+
+	boxCorners.corners[2] = float4(center + extents * float3(-1.0,  1.0, -1.0), 1.0);
+	boxCorners.corners[3] = float4(center + extents * float3(-1.0,  1.0,  1.0), 1.0);
+	boxCorners.corners[6] = float4(center + extents * float3( 1.0,  1.0, -1.0), 1.0);
+	boxCorners.corners[7] = float4(center + extents * float3( 1.0,  1.0,  1.0), 1.0);
+}
+
+void MakeTriangle(int id, float3 v1, float3 v2, float3 v3)
+{
+    _PositionBuffer[id + 0] = float4(v1, 0);
+    _PositionBuffer[id + 1] = float4(v2, 0);
+    _PositionBuffer[id + 2] = float4(v3, 0);
+}
+
+void MakeLowerSquare(inout int idx1, BoundingBox boundingBox, float width)
+{
+    float3 v1;
+    float3 v2;
+    float3 v3;
+
+    v1 = boundingBox.corners[0];
+    v2 = boundingBox.corners[1];
+    v3 = boundingBox.corners[0] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v1 = boundingBox.corners[1] + float3(width, 0, 0);
+    v2 = boundingBox.corners[1];
+    v3 = boundingBox.corners[0] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+
+    idx1 += 3;
+    v1 = boundingBox.corners[1] + float3(0, 0, 0);
+    v3 = boundingBox.corners[1] + float3(0, 0, width);
+    v2 = boundingBox.corners[5] + float3(width, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v2 = boundingBox.corners[5] + float3(width, 0, width);
+    v1 = boundingBox.corners[5] + float3(width, 0, 0);
+    v3 = boundingBox.corners[1] + float3(0, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+
+    idx1 += 3;
+    v1 = boundingBox.corners[4] + float3(0, 0, 0);
+    v2 = boundingBox.corners[5];
+    v3 = boundingBox.corners[4] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v1 = boundingBox.corners[5] + float3(width, 0, 0);
+    v2 = boundingBox.corners[5];
+    v3 = boundingBox.corners[4] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v1 = boundingBox.corners[0] + float3(0, 0, 0);
+    v2 = boundingBox.corners[4] + float3(width, 0, 0);
+    v3 = boundingBox.corners[0] + float3(0, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v2 = boundingBox.corners[4] + float3(width, 0, width);
+    v1 = boundingBox.corners[4] + float3(width, 0, 0);
+    v3 = boundingBox.corners[0] + float3(0, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+}
+
+void MakeUpperSquare(inout int idx1, BoundingBox boundingBox, float width)
+{
+    float3 v1;
+    float3 v2;
+    float3 v3;
+
+    v1 = boundingBox.corners[2];
+    v2 = boundingBox.corners[3];
+    v3 = boundingBox.corners[2] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v1 = boundingBox.corners[3] + float3(width, 0, 0);
+    v2 = boundingBox.corners[3];
+    v3 = boundingBox.corners[2] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+
+    idx1 += 3;
+    v1 = boundingBox.corners[3] + float3(0, 0, 0);
+    v3 = boundingBox.corners[3] + float3(0, 0, width);
+    v2 = boundingBox.corners[7] + float3(width, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v2 = boundingBox.corners[7] + float3(width, 0, width);
+    v1 = boundingBox.corners[7] + float3(width, 0, 0);
+    v3 = boundingBox.corners[3] + float3(0, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+
+    idx1 += 3;
+    v1 = boundingBox.corners[6] + float3(0, 0, 0);
+    v2 = boundingBox.corners[7];
+    v3 = boundingBox.corners[6] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v1 = boundingBox.corners[7] + float3(width, 0, 0);
+    v2 = boundingBox.corners[7];
+    v3 = boundingBox.corners[6] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v1 = boundingBox.corners[2] + float3(0, 0, 0);
+    v2 = boundingBox.corners[6] + float3(width, 0, 0);
+    v3 = boundingBox.corners[2] + float3(0, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v2 = boundingBox.corners[6] + float3(width, 0, width);
+    v1 = boundingBox.corners[6] + float3(width, 0, 0);
+    v3 = boundingBox.corners[2] + float3(0, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+}
+
+void MakeSidesSquares(inout int idx1, BoundingBox boundingBox, float width)
+{
+    float3 v1;
+    float3 v2;
+    float3 v3;
+
+    // 0 => 2
+    v1 = boundingBox.corners[0];
+    v2 = boundingBox.corners[2];
+    v3 = boundingBox.corners[0] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v1 = boundingBox.corners[2] + float3(width, 0, 0);
+    v2 = boundingBox.corners[2];
+    v3 = boundingBox.corners[0] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+
+    // 1 => 3
+    idx1 += 3;
+    v1 = boundingBox.corners[1] + float3(0, 0, 0);
+    v3 = boundingBox.corners[1] + float3(0, 0, width);
+    v2 = boundingBox.corners[3] + float3(width, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v2 = boundingBox.corners[3] + float3(width, 0, width);
+    v1 = boundingBox.corners[3] + float3(width, 0, 0);
+    v3 = boundingBox.corners[1] + float3(0, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+
+    // 4 => 6
+    idx1 += 3;
+    v1 = boundingBox.corners[4] + float3(0, 0, 0);
+    v2 = boundingBox.corners[6];
+    v3 = boundingBox.corners[4] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v1 = boundingBox.corners[6] + float3(width, 0, 0);
+    v2 = boundingBox.corners[6];
+    v3 = boundingBox.corners[4] + float3(width, 0, 0);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    // 5 => 7
+    idx1 += 3;
+    v1 = boundingBox.corners[5] + float3(0, 0, 0);
+    v2 = boundingBox.corners[7] + float3(width, 0, 0);
+    v3 = boundingBox.corners[5] + float3(0, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+
+    idx1 += 3;
+    v2 = boundingBox.corners[7] + float3(width, 0, width);
+    v1 = boundingBox.corners[7] + float3(width, 0, 0);
+    v3 = boundingBox.corners[5] + float3(0, 0, width);
+    MakeTriangle(idx1, v1, v2, v3);
+}
+
+[numthreads(1, 1, 1)]
+void DrawBounds(uint id : SV_DispatchThreadID)
+{
+    InstanceData instance = _InstanceBuffer[id];
+
+    BoundingBox boundingBox;
+	CalculateBoundingBoxCorners(instance.boundsCenter, instance.boundsExtents, boundingBox);
+
+    int idx1 = id * 24 * 3;
+    float width = 2.5;
+    MakeLowerSquare(idx1, boundingBox, width);
+    MakeUpperSquare(idx1, boundingBox, width);
+    MakeSidesSquares(idx1, boundingBox, width);
+}

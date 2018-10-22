@@ -1,4 +1,4 @@
-Shader "HiZ/BufferGenerate"
+Shader "IndirectRendering/HiZ/Buffer"
 {
     Properties
     {

@@ -34,13 +34,13 @@ cbuffer CB
 // Structured Buffers
 //--------------------------------------------------------------------------------------
 
-StructuredBuffer  <ComputeShaderInputData> Input;
-RWStructuredBuffer<ComputeShaderInputData> Data;
+StructuredBuffer  <InstanceData> Input;
+RWStructuredBuffer<InstanceData> Data;
 
 //--------------------------------------------------------------------------------------
 // Bitonic Sort Compute Shader
 //--------------------------------------------------------------------------------------
-groupshared ComputeShaderInputData shared_data[BITONIC_BLOCK_SIZE];
+groupshared InstanceData shared_data[BITONIC_BLOCK_SIZE];
 
 [numthreads(BITONIC_BLOCK_SIZE, 1, 1)]
 void BitonicSort(uint3 Gid  : SV_GroupID, 
@@ -56,7 +56,7 @@ void BitonicSort(uint3 Gid  : SV_GroupID,
 	// Sort the shared data
 	for (uint j = _Level >> 1; j > 0; j >>= 1)
 	{
-		ComputeShaderInputData result = shared_data[GI];
+		InstanceData result = shared_data[GI];
 		
 		if (
 				((shared_data[GI & ~j].distanceToCamera <= shared_data[GI | j].distanceToCamera) == ((bool)(_LevelMask & tID)))
@@ -78,7 +78,7 @@ void BitonicSort(uint3 Gid  : SV_GroupID,
 //--------------------------------------------------------------------------------------
 // Matrix Transpose Compute Shader
 //--------------------------------------------------------------------------------------
-groupshared ComputeShaderInputData transpose_shared_data[TRANSPOSE_BLOCK_SIZE * TRANSPOSE_BLOCK_SIZE];
+groupshared InstanceData transpose_shared_data[TRANSPOSE_BLOCK_SIZE * TRANSPOSE_BLOCK_SIZE];
 
 [numthreads(TRANSPOSE_BLOCK_SIZE, TRANSPOSE_BLOCK_SIZE, 1)]
 void MatrixTranspose(uint3 Gid  : SV_GroupID, 

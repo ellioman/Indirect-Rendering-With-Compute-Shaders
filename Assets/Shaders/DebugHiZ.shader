@@ -1,4 +1,4 @@
-﻿Shader "HiZ/DebugViewer"
+﻿Shader "IndirectRendering/HiZ/Debug"
 {
     Properties
     {
