@@ -19,6 +19,7 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 - GPU Sorting with Bitonic sorting
 - Compute shader: Frustum and shadow caster culling 
 - Compute shader: Occlusion culling with HierarchicalZBuffer
+- Compute shader: Detail (Screen Size) Culling
 - Compute shader: LOD objects using the distance from camera to object
 - Simple shadow mode: Only use one mesh for each instance type to lower setpass calls
 
