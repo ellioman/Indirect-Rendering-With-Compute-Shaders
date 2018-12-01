@@ -8,9 +8,9 @@ public class Example : MonoBehaviour
     #region Variables
 
     // Public
-    public bool createInstancesOnAwake;
+    public bool createInstancesOnAwake = false;
+    public bool indirectRenderingEnabled = true;
     public float areaSize = 5000f;
-
     public NumberOfInstances numberOfInstances;
     public IndirectRenderer indirectRenderer;
     public List<IndirectInstanceData> instances = new List<IndirectInstanceData>();
@@ -28,6 +28,8 @@ public class Example : MonoBehaviour
         _262144 = 262144
     }
 
+    private bool lastIndirectRenderingEnabled = false;
+    private GameObject normalInstancesParent;
     #endregion
 
     #region MonoBehaviour
@@ -38,8 +40,27 @@ public class Example : MonoBehaviour
         {
             CreateInstanceData();
         }
+        
+        InstantiateInstance();
         indirectRenderer.Initialize(instances.ToArray());
+        
+        lastIndirectRenderingEnabled = indirectRenderingEnabled;
+        indirectRenderer.isEnabled = indirectRenderingEnabled;
     }
+
+    private void Update()
+    {
+        if (lastIndirectRenderingEnabled != indirectRenderingEnabled)
+        {
+            lastIndirectRenderingEnabled = indirectRenderingEnabled;
+            normalInstancesParent.SetActive(!indirectRenderingEnabled);
+            indirectRenderer.isEnabled = indirectRenderingEnabled;
+        }
+    }
+
+    #endregion
+
+    #region Private Functions
 
     [ContextMenu("CreateInstanceData()")]
     private void CreateInstanceData()
@@ -49,7 +70,7 @@ public class Example : MonoBehaviour
             Debug.LogError("Instances list is empty!", this);
             return;
         }
-
+        
         int numOfInstancesPerType = ((int)numberOfInstances) / instances.Count;
         int instanceCounter = 0;
         for (int i = 0; i < instances.Count; i++)
@@ -57,7 +78,7 @@ public class Example : MonoBehaviour
             instances[i].positions = new Vector3[numOfInstancesPerType];
             instances[i].rotations = new Vector3[numOfInstancesPerType];
             instances[i].uniformScales = new float[numOfInstancesPerType];
-
+            
             Vector2 L = Vector2.one * i;
             for (int k = 0; k < numOfInstancesPerType; k++)
             {
@@ -69,10 +90,24 @@ public class Example : MonoBehaviour
             }
         }
     }
-
-    #endregion
-
-    #region Private Functions
+    
+    private void InstantiateInstance()
+    {
+        normalInstancesParent = new GameObject("InstancesParent");
+        for (int i = 0; i < instances.Count; i++)
+        {
+            for (int j = 0; j < instances[i].positions.Length; j++)
+            {
+                GameObject obj = Instantiate(instances[i].prefab);
+                obj.transform.position = instances[i].positions[j];
+                obj.transform.localScale = Vector3.one * instances[i].uniformScales[j];
+                obj.transform.rotation = Quaternion.Euler(instances[i].rotations[j]);
+                obj.transform.parent = normalInstancesParent.transform;
+            }
+        }
+        
+        normalInstancesParent.SetActive(!indirectRenderingEnabled);
+    }
 
     // Taken from:
     // http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/

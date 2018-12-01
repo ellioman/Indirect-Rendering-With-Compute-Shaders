@@ -4,34 +4,30 @@
 
 struct InstanceData
 {
-	uint drawCallID;		// 1
-	float3 position; 		// 3
-	float3 rotation; 		// 6
-	float uniformScale;		// 7
-	float3 boundsCenter; 	// 10
-	float3 boundsExtents; 	// 13
-	float distanceToCamera; // 14
+	uint drawDataID;				// 1
+	uint drawCallID;				// 2
+	float3 position;				// 5
+	float3 rotation;				// 8
+	float uniformScale;				// 9
+	float3 boundsCenter;			// 12
+	float3 boundsExtents;			// 15
+	float distanceToCamera;			// 16
 };
 
 struct InstanceDrawData
 {
-    float3 position;// 3
-    float3 rotation;// 6
-    float uniformScale;	// 7
-};
-
-struct FrustumPlane
-{
-	float4 normal;
-	float3 pointOnPlane;
+	float4x4 unity_ObjectToWorld;	// 16
+	float4x4 unity_WorldToObject;	// 32
 };
 
 struct BoundingBox
 {
-	float4 corners[8];
-	float3 center;
-	float3 minPos;
-	float3 maxPos;
+	float3 minPos;					// 3
+	float3 maxPos;					// 6
+	float4 clipMinMaxXY;			// 10
+	float clipMinZ;					// 11
+	float clipMaxZ;					// 12
+	float4 clipLightMinMaxXY;		// 16
 };
 
 #endif

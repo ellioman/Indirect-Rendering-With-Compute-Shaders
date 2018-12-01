@@ -1,0 +1,88 @@
+﻿//--------------------------------------------------------------------------------------
+// Includes
+//--------------------------------------------------------------------------------------
+
+#include "ShaderInclude_IndirectStructs.cginc"
+
+//--------------------------------------------------------------------------------------
+// Pragmas
+//--------------------------------------------------------------------------------------
+
+#pragma kernel CSMain
+
+//--------------------------------------------------------------------------------------
+// Constants
+//--------------------------------------------------------------------------------------
+
+#define THREAD_GROUP_SIZE_X 128
+#define THREAD_GROUP_SIZE_Y 1
+#define THREAD_GROUP_SIZE_Z 1
+
+//--------------------------------------------------------------------------------------
+// Constant Buffers
+//--------------------------------------------------------------------------------------
+
+cbuffer CB
+{
+	uint _NumberOfInstanceTypes;
+}
+
+//--------------------------------------------------------------------------------------
+// Structured Buffers
+//--------------------------------------------------------------------------------------
+
+StructuredBuffer<InstanceDrawData> _InstanceDrawData;
+Buffer<uint> _InstancePredicatesIn;
+Buffer<uint> _GroupSumArray;
+Buffer<uint> _ScannedInstancePredicates;
+RWStructuredBuffer<InstanceDrawData> _InstanceDataOut;
+RWBuffer<uint> _DrawcallDataOut;
+//--------------------------------------------------------------------------------------
+// Kernels & Functions
+//--------------------------------------------------------------------------------------
+
+
+// Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
+[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
+inline void CSMain (
+		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
+		in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
+		in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
+		in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
+	)        
+{
+	uint tID = _dispatchThreadID.x;
+	uint groupID = _groupID.x;
+	uint groupSum = _groupID.x > 0 ? _GroupSumArray[_groupID.x] : 0;
+
+	//scatter results
+	if (_InstancePredicatesIn[tID] > 0)
+	{
+		InstanceDrawData input = _InstanceDrawData[_InstancePredicatesIn[tID]];
+		InstanceDrawData output;
+		output.unity_ObjectToWorld = input.unity_ObjectToWorld;
+		output.unity_WorldToObject = input.unity_WorldToObject;
+
+		uint instanceDataOutIndex = _ScannedInstancePredicates[tID] + groupSum;
+		_InstanceDataOut[instanceDataOutIndex] = output;
+	}
+
+	if ((tID == 0) * (groupID == 0))
+	{
+		//patch up the visible instance counts per prop type 
+		for (uint k = 1; k < _NumberOfInstanceTypes; k++)
+		{
+			// If we're updating the shadow args...
+			if ((k + 1) % 4 == 0)
+			{
+				// Make them have the same offset as LOD00...
+				_DrawcallDataOut[k * 5 + 4] = _DrawcallDataOut[(k - 3) * 5 + 4];
+			}
+			else
+			{
+				_DrawcallDataOut[k * 5 + 4] = _DrawcallDataOut[(k - 1) * 5 + 4] +	//previous prop type offset 
+											_DrawcallDataOut[(k - 1) * 5 + 1];	//previous prop type number of instances
+			}
+		}
+	}
+}

@@ -74,6 +74,7 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 
 [nonoptimalrobot - Shadow Volume Culling](https://nonoptimalrobot.wordpress.com/2012/04/19/shadow-volume-culling/)
 
+[Stephen Hill and Daniel Collin - Practical, Dynamic Visibility for Games](https://blog.selfshadow.com/publications/practical-visibility/)
 
 
 License

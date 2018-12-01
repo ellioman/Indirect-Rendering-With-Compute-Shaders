@@ -1,0 +1,111 @@
+﻿//--------------------------------------------------------------------------------------
+// Includes
+//--------------------------------------------------------------------------------------
+
+#include "ShaderInclude_IndirectStructs.cginc"
+
+//--------------------------------------------------------------------------------------
+// Pragmas
+//--------------------------------------------------------------------------------------
+
+#pragma kernel CSMain
+
+//--------------------------------------------------------------------------------------
+// Constants
+//--------------------------------------------------------------------------------------
+
+#define THREAD_GROUP_SIZE_X 128
+#define THREAD_GROUP_SIZE_Y 1
+#define THREAD_GROUP_SIZE_Z 1
+
+//--------------------------------------------------------------------------------------
+// Constant Buffers
+//--------------------------------------------------------------------------------------
+
+
+//--------------------------------------------------------------------------------------
+// Structured Buffers
+//--------------------------------------------------------------------------------------
+StructuredBuffer<InstanceData> _InstanceDataIn;
+RWStructuredBuffer<InstanceDrawData> _InstanceDataOut;
+//--------------------------------------------------------------------------------------
+// Kernels & Functions
+//--------------------------------------------------------------------------------------
+
+float4x4 rotationMatrix(float3 axis, float angle)
+{
+	axis = normalize(axis);
+	float s = sin(angle);
+	float c = cos(angle);
+	float oc = 1.0 - c;
+
+	return float4x4(
+		oc * axis.x * axis.x + c, oc * axis.x * axis.y - axis.z * s, oc * axis.z * axis.x + axis.y * s, 0.0,
+		oc * axis.x * axis.y + axis.z * s, oc * axis.y * axis.y + c, oc * axis.y * axis.z - axis.x * s, 0.0,
+		oc * axis.z * axis.x - axis.y * s, oc * axis.y * axis.z + axis.x * s, oc * axis.z * axis.z + c, 0.0,
+		0, 0, 0,          1.0);
+}
+
+// https://forum.unity.com/threads/incorrect-normals-on-after-rotating-instances-graphics-drawmeshinstancedindirect.503232/#post-3277479
+float4x4 inverse(float4x4 input)
+{
+	#define minor(a,b,c) determinant(float3x3(input.a, input.b, input.c))
+	
+		float4x4 cofactors = float4x4(
+			minor(_22_23_24, _32_33_34, _42_43_44),
+			-minor(_21_23_24, _31_33_34, _41_43_44),
+			minor(_21_22_24, _31_32_34, _41_42_44),
+			-minor(_21_22_23, _31_32_33, _41_42_43),
+	
+			-minor(_12_13_14, _32_33_34, _42_43_44),
+			minor(_11_13_14, _31_33_34, _41_43_44),
+			-minor(_11_12_14, _31_32_34, _41_42_44),
+			minor(_11_12_13, _31_32_33, _41_42_43),
+	
+			minor(_12_13_14, _22_23_24, _42_43_44),
+			-minor(_11_13_14, _21_23_24, _41_43_44),
+			minor(_11_12_14, _21_22_24, _41_42_44),
+			-minor(_11_12_13, _21_22_23, _41_42_43),
+	
+			-minor(_12_13_14, _22_23_24, _32_33_34),
+			minor(_11_13_14, _21_23_24, _31_33_34),
+			-minor(_11_12_14, _21_22_24, _31_32_34),
+			minor(_11_12_13, _21_22_23, _31_32_33)
+			);
+	#undef minor
+	return transpose(cofactors) / determinant(input);
+}
+
+// Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
+[numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
+inline void CSMain (
+		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
+		in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
+		in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
+		in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
+	)        
+{
+	uint tID = _dispatchThreadID.x;
+
+	InstanceData instance = _InstanceDataIn[tID];
+	InstanceDrawData output;
+
+	float3 position = instance.position;
+	float scale = instance.uniformScale;
+
+	float4x4 xRotationMatrix = rotationMatrix(float3(1, 0, 0), radians(instance.rotation.x));
+	float4x4 yRotationMatrix = rotationMatrix(float3(0, 1, 0), radians(instance.rotation.y));
+	float4x4 zRotationMatrix = rotationMatrix(float3(0, 0, 1), radians(instance.rotation.z));
+	float4x4 rotMatrix = mul(zRotationMatrix, mul(yRotationMatrix, xRotationMatrix));
+
+	float4x4 translation = {
+		scale, 0, 0, position.x,
+		0, scale, 0, position.y,
+		0, 0, scale, position.z,
+		0, 0, 0, 1
+	};
+	output.unity_ObjectToWorld = mul(translation, rotMatrix);
+	output.unity_WorldToObject = inverse(output.unity_ObjectToWorld);
+
+	_InstanceDataOut[tID] = output;
+}
