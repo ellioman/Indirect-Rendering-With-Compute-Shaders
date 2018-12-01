@@ -15,14 +15,12 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 ## Features
 
 - Quasirandom squences to place the instances
-- Use compute buffers and compute shaders
 - Draw things using Graphics.DrawMeshInstancedIndirect
 - GPU Sorting with Bitonic sorting
-- Compute shader: Frustum culling
+- Compute shader: Frustum and shadow caster culling 
 - Compute shader: Occlusion culling with HierarchicalZBuffer
 - Compute shader: LOD objects using the distance from camera to object
-- Extending camera frustum towards light to include shadow casting objects
-- Use LOD02 mesh for all shadows
+- Simple shadow mode: Only use one mesh for each instance type to lower setpass calls
 
 ## Project Setup
 - "_Example.cs" script on the "Example" game object:
@@ -30,7 +28,7 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 - "IndirectRenderer.cs" on the "MainCamera" game object:
 	- Is the main class in the project. It initializes all the buffers and compute shaders and then dispatches the compute shaders and draws the objects when Unity calls the PreCull() function.
 - "HiZBuffer.cs" script on the "OccluderCamera" game object:
-	- Creates a hierarchial Z-Buffer texture that is used when doing occlusion culling.
+	- Creates a hierarchial Z-Buffer texture that contains the depth texture and shadow map which are used when doing frustum and occlusion culling
 
 ## TODO
 - Improve the instance sorting:
@@ -40,7 +38,6 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 - Try to make the compute buffers smaller in size. Ex: Pack the three floats, used for bounds size, into one uint.
 - Create the Hi-Z Texture with compute shaders
 - Try out Raster Occlusion instead of Hi-Z (See "NVidia Siggraph 2014" & "Github - nvpro-samples" below)
-- Try and profile structure buffers with structs divisible by 128 bits (sizeof float) => https://developer.nvidia.com/content/understanding-structured-buffer-performance
 
 ## Resources
 
