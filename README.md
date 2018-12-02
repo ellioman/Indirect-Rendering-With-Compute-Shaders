@@ -1,13 +1,11 @@
 Indirect Rendering With Compute Shaders
 ========
 
-An example of drawing numerous instances in Unity3D using Compute shaders and Graphics.DrawMeshInstancedIndirect.
+An example of rendering numerous instances in Unity3D using Compute shaders for culling and LOD'ing and Graphics.DrawMeshInstancedIndirect to draw.
 
-![Generative](https://raw.githubusercontent.com/ellioman/Indirect-Rendering-With-Compute-Shaders/master/Gifs/IndirectRendering_01_FrustumCulling.gif)
+![Generative](https://raw.githubusercontent.com/ellioman/Indirect-Rendering-With-Compute-Shaders/master/Gifs/IndirectRendering_01_Culling.gif)
 
-![Generative](https://raw.githubusercontent.com/ellioman/Indirect-Rendering-With-Compute-Shaders/master/Gifs/IndirectRendering_02_Occlusion.gif)
-
-![Generative](https://raw.githubusercontent.com/ellioman/Indirect-Rendering-With-Compute-Shaders/master/Gifs/IndirectRendering_03_LOD.gif)
+![Generative](https://raw.githubusercontent.com/ellioman/Indirect-Rendering-With-Compute-Shaders/master/Gifs/IndirectRendering_02_LOD.gif)
 
 ## Note
 This project has only been tested on a Macbook Pro using Metal. When using DirectX, it is very likely you need to add the arguments buffer into the instance rendering shader and add the offset to unity_InstanceID to get the correct instance.
@@ -34,7 +32,7 @@ This project has only been tested on a Macbook Pro using Metal. When using Direc
 ## TODO
 - Improve the instance sorting:
 	- On my Macbook pro (mid 2014) sorting takes approx 50% of the GPU time
-	- The GPU sorting must support instance numbers that are not in the non power of two (right now I'm padding the data to become POT)
+	- The GPU sorting must support instance numbers that are not in the non power of two 
 	- Find a better performant approach for the CPU Sorting
 - Try to make the compute buffers smaller in size. Ex: Pack the three floats, used for bounds size, into one uint.
 - Create the Hi-Z Texture with compute shaders
