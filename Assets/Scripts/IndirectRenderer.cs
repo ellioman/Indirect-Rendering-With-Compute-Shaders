@@ -199,6 +199,29 @@ public class IndirectRenderer : MonoBehaviour
         
         Destroy(m_debugBoundsMesh);
     }
+    
+    // http://answers.unity.com/answers/477208/view.html
+    public void OnDrawGizmos() 
+    {
+        if (m_camera == null)
+        {
+            return;
+        }
+        
+        Matrix4x4 temp = Gizmos.matrix;
+        Gizmos.matrix = Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one);
+        if (m_camera.orthographic)
+        {
+            float spread = m_camera.farClipPlane - m_camera.nearClipPlane;
+            float center = (m_camera.farClipPlane + m_camera.nearClipPlane)*0.5f;
+            Gizmos.DrawWireCube(new Vector3(0,0,center), new Vector3(m_camera.orthographicSize*2*m_camera.aspect, m_camera.orthographicSize*2, spread));
+        }
+        else
+        {
+            Gizmos.DrawFrustum(Vector3.zero, m_camera.fieldOfView, m_camera.farClipPlane, m_camera.nearClipPlane, m_camera.aspect);
+        }
+        Gizmos.matrix = temp;
+    }
 
     #endregion
 
