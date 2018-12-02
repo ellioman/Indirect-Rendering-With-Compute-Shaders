@@ -139,6 +139,7 @@ public class IndirectRenderer : MonoBehaviour
     private const int NUMBER_OF_ARGS_PER_DRAW = 5;
     private const int NUMBER_OF_DRAW_CALLS = 4; // (LOD00 + LOD01 + LOD02 + SHADOW)
     private const int NUMBER_OF_ARGS_PER_INSTANCE_TYPE = NUMBER_OF_ARGS_PER_DRAW * NUMBER_OF_DRAW_CALLS; // 20
+    private const int ARGS_BYTE_SIZE_PER_DRAW_CALL = NUMBER_OF_ARGS_PER_DRAW * sizeof(uint); // 20
     private const int ARGS_BYTE_SIZE_PER_INSTANCE_TYPE = NUMBER_OF_ARGS_PER_INSTANCE_TYPE * sizeof(uint); // 80
     private const int SCAN_THREAD_GROUP_SIZE = 64;
     
@@ -235,10 +236,10 @@ public class IndirectRenderer : MonoBehaviour
             {
                 int argsIndex = i * ARGS_BYTE_SIZE_PER_INSTANCE_TYPE;
                 IndirectRenderingMesh irm = m_indirectMeshes[i];
-                Graphics.DrawMeshInstancedIndirect(irm.mesh,       0, irm.material, m_bounds, m_argsBuffer, argsIndex + NUMBER_OF_ARGS_PER_INSTANCE_TYPE * 0, irm.Lod00MatPropBlock,  ShadowCastingMode.Off);
-                Graphics.DrawMeshInstancedIndirect(irm.mesh,       0, irm.material, m_bounds, m_argsBuffer, argsIndex + NUMBER_OF_ARGS_PER_INSTANCE_TYPE * 1, irm.Lod01MatPropBlock,  ShadowCastingMode.Off);
-                Graphics.DrawMeshInstancedIndirect(irm.mesh,       0, irm.material, m_bounds, m_argsBuffer, argsIndex + NUMBER_OF_ARGS_PER_INSTANCE_TYPE * 2, irm.Lod02MatPropBlock,  ShadowCastingMode.Off);
-                Graphics.DrawMeshInstancedIndirect(irm.shadowMesh, 0, irm.material, m_bounds, m_argsBuffer, argsIndex + NUMBER_OF_ARGS_PER_INSTANCE_TYPE * 3, irm.ShadowMatPropBlock, ShadowCastingMode.ShadowsOnly);
+                Graphics.DrawMeshInstancedIndirect(irm.mesh,       0, irm.material, m_bounds, m_argsBuffer, argsIndex + ARGS_BYTE_SIZE_PER_DRAW_CALL * 0, irm.Lod00MatPropBlock,  ShadowCastingMode.Off);
+                Graphics.DrawMeshInstancedIndirect(irm.mesh,       0, irm.material, m_bounds, m_argsBuffer, argsIndex + ARGS_BYTE_SIZE_PER_DRAW_CALL * 1, irm.Lod01MatPropBlock,  ShadowCastingMode.Off);
+                Graphics.DrawMeshInstancedIndirect(irm.mesh,       0, irm.material, m_bounds, m_argsBuffer, argsIndex + ARGS_BYTE_SIZE_PER_DRAW_CALL * 2, irm.Lod02MatPropBlock,  ShadowCastingMode.Off);
+                Graphics.DrawMeshInstancedIndirect(irm.shadowMesh, 0, irm.material, m_bounds, m_argsBuffer, argsIndex + ARGS_BYTE_SIZE_PER_DRAW_CALL * 3, irm.ShadowMatPropBlock, ShadowCastingMode.ShadowsOnly);
             }
         }
         else
@@ -247,9 +248,9 @@ public class IndirectRenderer : MonoBehaviour
             {
                 int argsIndex = i * ARGS_BYTE_SIZE_PER_INSTANCE_TYPE;
                 IndirectRenderingMesh irm = m_indirectMeshes[i];
-                Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_bounds, m_argsBuffer, argsIndex + NUMBER_OF_ARGS_PER_INSTANCE_TYPE * 0, irm.Lod00MatPropBlock, ShadowCastingMode.On);
-                Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_bounds, m_argsBuffer, argsIndex + NUMBER_OF_ARGS_PER_INSTANCE_TYPE * 1, irm.Lod01MatPropBlock, ShadowCastingMode.On);
-                Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_bounds, m_argsBuffer, argsIndex + NUMBER_OF_ARGS_PER_INSTANCE_TYPE * 2, irm.Lod02MatPropBlock, ShadowCastingMode.On);
+                Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_bounds, m_argsBuffer, argsIndex + ARGS_BYTE_SIZE_PER_DRAW_CALL * 0, irm.Lod00MatPropBlock, ShadowCastingMode.On);
+                Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_bounds, m_argsBuffer, argsIndex + ARGS_BYTE_SIZE_PER_DRAW_CALL * 1, irm.Lod01MatPropBlock, ShadowCastingMode.On);
+                Graphics.DrawMeshInstancedIndirect(irm.mesh, 0, irm.material, m_bounds, m_argsBuffer, argsIndex + ARGS_BYTE_SIZE_PER_DRAW_CALL * 2, irm.Lod02MatPropBlock, ShadowCastingMode.On);
             }
         }
         
