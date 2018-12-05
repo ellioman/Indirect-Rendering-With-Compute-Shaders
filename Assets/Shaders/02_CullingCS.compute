@@ -231,11 +231,11 @@ inline uint ShouldFrustumCull(BoundingBox box, InstanceData instance, float4x4 w
 inline void AddInstanceToVisibleList(uint tID, InstanceData instance)
 {
 	// Mark the instance as visible
-	_IsVisibleBuffer[tID] = instance.drawDataID;
+	_IsVisibleBuffer[tID] = 1;
 
 	// Mark it as a shadow caster
 	InterlockedAdd(_ArgsBuffer[instance.drawCallID + 16], 1);
-
+    
 	// Assign the correct LOD
 
 	// LOD02

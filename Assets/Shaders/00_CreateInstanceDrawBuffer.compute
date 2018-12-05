@@ -104,6 +104,7 @@ inline void CSMain (
 		0, 0, scale, position.z,
 		0, 0, 0, 1
 	};
+    
 	output.unity_ObjectToWorld = mul(translation, rotMatrix);
 	output.unity_WorldToObject = inverse(output.unity_ObjectToWorld);
 

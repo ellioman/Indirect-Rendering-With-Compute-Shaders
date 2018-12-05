@@ -378,6 +378,7 @@ public class IndirectRenderer : MonoBehaviour
             
             // Input
             m_05_copyInstanceDataCS.SetInt("_NumberOfInstanceTypes", m_numberOfInstanceTypes * 4);
+            m_05_copyInstanceDataCS.SetBuffer(m_05_copyInstanceDataKernelID, "_InstanceData", m_instanceDataBuffer);
             m_05_copyInstanceDataCS.SetBuffer(m_05_copyInstanceDataKernelID, "_InstanceDrawData", m_instanceDrawDataBuffer);
             m_05_copyInstanceDataCS.SetBuffer(m_05_copyInstanceDataKernelID, "_InstancePredicatesIn", m_isVisibleBuffer);
             m_05_copyInstanceDataCS.SetBuffer(m_05_copyInstanceDataKernelID, "_GroupSumArray", m_scannedGroupSumBuffer);
@@ -571,7 +572,6 @@ public class IndirectRenderer : MonoBehaviour
             // Add the instance data (positions, rotations, scaling, bounds...)
             for (int j = 0; j < m_instances[i].positions.Length; j++)
             {
-                instanceCounter++;
                 IndirectInstanceData _data = m_instances[i];
                 InstanceData newData = new InstanceData();
                 
@@ -586,7 +586,7 @@ public class IndirectRenderer : MonoBehaviour
                 }
                 DestroyImmediate(obj);
                 
-                newData.drawDataID = (uint)(instanceCounter - 1);
+                newData.drawDataID = (uint)(instanceCounter);
                 newData.drawCallID = (uint)argsIndex;
                 newData.position = _data.positions[j];
                 newData.rotation = _data.rotations[j];
@@ -596,6 +596,8 @@ public class IndirectRenderer : MonoBehaviour
                 newData.distanceToCamera = Vector3.Distance(_data.positions[j], m_camera.transform.position);
                 irm.computeInstances.Add(newData);
                 allInstancesPositionsList.Add(newData);
+                
+                instanceCounter++;
             }
             
             // Add the data to the renderer list

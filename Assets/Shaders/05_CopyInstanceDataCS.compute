@@ -31,6 +31,7 @@ cbuffer CB
 // Structured Buffers
 //--------------------------------------------------------------------------------------
 
+StructuredBuffer<InstanceData> _InstanceData;
 StructuredBuffer<InstanceDrawData> _InstanceDrawData;
 Buffer<uint> _InstancePredicatesIn;
 Buffer<uint> _GroupSumArray;
@@ -56,15 +57,10 @@ inline void CSMain (
 	uint groupSum = _groupID.x > 0 ? _GroupSumArray[_groupID.x] : 0;
 
 	//scatter results
-	if (_InstancePredicatesIn[tID] > 0)
+	if (_InstancePredicatesIn[tID] == 1)
 	{
-		InstanceDrawData input = _InstanceDrawData[_InstancePredicatesIn[tID]];
-		InstanceDrawData output;
-		output.unity_ObjectToWorld = input.unity_ObjectToWorld;
-		output.unity_WorldToObject = input.unity_WorldToObject;
-
 		uint instanceDataOutIndex = _ScannedInstancePredicates[tID] + groupSum;
-		_InstanceDataOut[instanceDataOutIndex] = output;
+        _InstanceDataOut[instanceDataOutIndex] = _InstanceDrawData[_InstanceData[tID].drawDataID];
 	}
 
 	if ((tID == 0) * (groupID == 0))
