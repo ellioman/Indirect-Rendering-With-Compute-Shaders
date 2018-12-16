@@ -7,11 +7,10 @@ An example of rendering numerous instances in Unity3D using Compute shaders for 
 
 ![Generative](https://raw.githubusercontent.com/ellioman/Indirect-Rendering-With-Compute-Shaders/master/Gifs/IndirectRendering_02_LOD.gif)
 
-## Note
-This project has only been tested on a Macbook Pro using Metal. When using DirectX, it is very likely you need to add the arguments buffer into the instance rendering shader and add the offset to unity_InstanceID to get the correct instance.
 
 ## Features
 
+- Tested on Metal (Mac) and D3D11.
 - Quasirandom squences to place the instances
 - Draw things using Graphics.DrawMeshInstancedIndirect
 - GPU Sorting with Bitonic sorting
