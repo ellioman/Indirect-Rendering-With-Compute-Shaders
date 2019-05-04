@@ -4,7 +4,6 @@
 
 #include "ShaderInclude_IndirectStructs.cginc"
 #include "UnityCG.cginc"
-// #include "AutoLight.cginc"
 #include "UnityDeferredLibrary.cginc"
 
 //--------------------------------------------------------------------------------------
@@ -29,282 +28,223 @@
 
 cbuffer CB
 {
-	uint _ShouldFrustumCull;
-	uint _ShouldOcclusionCull;
-	uint _ShouldDetailCull;
-	uint _ShouldLOD;
-	
-	int _Cascades;
-	float _DetailCullingScreenPercentage;
-	float2 _HiZTextureSize;
-	float3 _CamPosition;
-	
-	float4x4 _UNITY_MATRIX_MVP;
-	Texture2D<float4> _HiZMap;
-	SamplerState sampler_HiZMap; // "sampler" + “_HiZMap”
-	Texture2D<float4> _Unity_WorldToShadow;
-	SamplerState sampler_Unity_WorldToShadow; // "sampler" + “_HiZMap”
+    uint _ShouldFrustumCull;
+    uint _ShouldOcclusionCull;
+    uint _ShouldDetailCull;
+    uint _ShouldLOD;
+    uint _ShouldOnlyUseLOD02Shadows;
+    
+    int _ShadowCascades;
+    float _ShadowDistance;
+    float _DetailCullingScreenPercentage;
+    float2 _HiZTextureSize;
+    float3 _CamPosition;
+    
+    float4x4 _UNITY_MATRIX_MVP;
+    Texture2D<float4> _HiZMap;
+    SamplerState sampler_HiZMap; // "sampler" + “_HiZMap”
 };
 
 //--------------------------------------------------------------------------------------
 // Structured Buffers
 //--------------------------------------------------------------------------------------
 
-RWStructuredBuffer<InstanceData> _InstanceDataBuffer;
+StructuredBuffer<InstanceData> _InstanceDataBuffer;
 RWStructuredBuffer<uint> _ArgsBuffer;
 RWStructuredBuffer<uint> _IsVisibleBuffer;
+RWStructuredBuffer<uint> _ShadowArgsBuffer;
+RWStructuredBuffer<uint> _ShadowIsVisibleBuffer;
+RWStructuredBuffer<SortingData> _SortingData;
 
 //--------------------------------------------------------------------------------------
 // Kernels & Functions
 //--------------------------------------------------------------------------------------
 
-inline float4x4 CalculateWorldToShadowMatrix()
+inline uint IsCameraOutsideObjBounds(float3 pos, float3 minPos, float3 maxPos)
 {
-	float4 matRow1 = _Unity_WorldToShadow.SampleLevel(sampler_Unity_WorldToShadow, float2(0.000, 0), 0);
-	float4 matRow2 = _Unity_WorldToShadow.SampleLevel(sampler_Unity_WorldToShadow, float2(0.330, 0), 0);
-	float4 matRow3 = _Unity_WorldToShadow.SampleLevel(sampler_Unity_WorldToShadow, float2(0.660, 0), 0);
-	float4 matRow4 = _Unity_WorldToShadow.SampleLevel(sampler_Unity_WorldToShadow, float2(1.000, 0), 0);
-	return float4x4(matRow1, matRow2, matRow3, matRow4);
+    float boundsSize = distance(maxPos, minPos);
+    return ((distance(pos, maxPos) > boundsSize)
+            + (distance(pos, minPos) > boundsSize));
 }
 
-inline BoundingBox CalculateBoundingBoundingBox(uint tID, float3 center, float3 extents, float4x4 worldToShadowMatrix)
+inline uint IsVisibleAfterDetailCulling(float clipMinX, float clipMaxX, float clipMinY, float clipMaxY)
 {
-	// Z depth: 1 is near camera near clip, 0 is far...
-
-	BoundingBox box;
-	box.minPos.xyz = center.xyz - extents.xyz;
-	box.maxPos.xyz = center.xyz + extents.xyz;
-
-	float4 boxCorners[8];
-	boxCorners[0] = float4(box.minPos.x, box.minPos.y, box.minPos.z, 1.0);
-	boxCorners[1] = float4(box.minPos.x, box.minPos.y, box.maxPos.z, 1.0);
-	boxCorners[2] = float4(box.minPos.x, box.maxPos.y, box.minPos.z, 1.0);
-	boxCorners[3] = float4(box.minPos.x, box.maxPos.y, box.maxPos.z, 1.0);
-	
-	boxCorners[4] = float4(box.maxPos.x, box.minPos.y, box.minPos.z, 1.0);
-	boxCorners[5] = float4(box.maxPos.x, box.minPos.y, box.maxPos.z, 1.0);
-	boxCorners[6] = float4(box.maxPos.x, box.maxPos.y, box.minPos.z, 1.0);
-	boxCorners[7] = float4(box.maxPos.x, box.maxPos.y, box.maxPos.z, 1.0);
-	
-	float4 clipPos = mul(_UNITY_MATRIX_MVP, float4(center.xyz, 1.0));
-	clipPos.xyz = clipPos.xyz / clipPos.w;
-
-	float4 lightClipPos = mul(worldToShadowMatrix, float4(center.xyz, 1.0));
-	lightClipPos.xyz = lightClipPos.xyz / lightClipPos.w;
-
-	float2 minXY = clipPos.xy;
-	float2 maxXY = clipPos.xy;
-	float minZ = clipPos.z;
-	float maxZ = clipPos.z;
-
-	float2 minLightXY = lightClipPos.xy;
-	float2 maxLightXY = lightClipPos.xy;
-
-	float minDistanceToCamera = distance(center.xyz, _CamPosition.xyz);
-
-	[unroll]
-	for (int i = 0; i < 8; i++)
-	{
-		float4 clipPos2 = mul(_UNITY_MATRIX_MVP, boxCorners[i]);
-		clipPos2.xyz = clipPos2.xyz / clipPos2.w;
-
-		minXY.x = min(clipPos2.x, minXY.x);
-		minXY.y = min(clipPos2.y, minXY.y);
-		maxXY.x = max(clipPos2.x, maxXY.x);
-		maxXY.y = max(clipPos2.y, maxXY.y);
-		minZ  = min(clipPos2.z, minZ);
-		maxZ  = max(clipPos2.z, maxZ);
-		
-		lightClipPos = mul(worldToShadowMatrix, boxCorners[i]);
-		lightClipPos.xyz = lightClipPos.xyz / lightClipPos.w;
-
-		minLightXY = min(lightClipPos.xy, minLightXY);
-		maxLightXY = max(lightClipPos.xy, maxLightXY);
-
-		minDistanceToCamera = min(distance(boxCorners[i].xyz, _CamPosition.xyz), minDistanceToCamera);
-	}
-
-	// Output...
-	box.clipMinMaxXY.x = minXY.x;
-	box.clipMinMaxXY.y = minXY.y;
-	box.clipMinMaxXY.z = maxXY.x;
-	box.clipMinMaxXY.w = maxXY.y;
-	box.clipMinZ = minZ;
-	box.clipMaxZ = maxZ;
-
-	box.clipLightMinMaxXY = float4(minLightXY, maxLightXY);
-
-	// Update the instance to camera distance
-	_InstanceDataBuffer[tID].distanceToCamera = minDistanceToCamera;
-
-	return box;
+    return saturate(
+            (distance(clipMinX, clipMaxX) >= _DetailCullingScreenPercentage)
+            + (distance(clipMinY, clipMaxY) >= _DetailCullingScreenPercentage)
+    );
 }
 
-inline uint IsCameraOutsideObjBounds(BoundingBox box, float4x4 worldToShadowMatrix)
+// Hi-Z Culling
+inline uint IsVisibleAfterOcclusionCulling(InstanceData instance, float clipMinX, float clipMaxX, float clipMinY, float clipMaxY, float clipMinZ)
 {
-	float boundsSize = 0.5 * distance(box.maxPos, box.minPos); 
-	uint isInSideInstanceBounds = 
-			(distance(_CamPosition.xyz, box.maxPos.xyz) < boundsSize)
-		+ 	(distance(_CamPosition.xyz, box.minPos.xyz) < boundsSize)
-	;
-	return !isInSideInstanceBounds;
-}
-
-inline uint ShouldDetailCull(BoundingBox box, uint isInstanceInFrontOfCamera)
-{
-	uint isBelowDetailSize = (
-			distance(box.clipMinMaxXY.x, box.clipMinMaxXY.z) < _DetailCullingScreenPercentage
-		+	(distance(box.clipMinMaxXY.y, box.clipMinMaxXY.w) < _DetailCullingScreenPercentage)
-	);
-
-	return _ShouldDetailCull * isInstanceInFrontOfCamera * isBelowDetailSize;
-}
-
-inline uint ShouldHiZCull(InstanceData instance, float3 position, BoundingBox box, uint isInstanceInFrontOfCamera)
-{
-	float4 boxUVs = box.clipMinMaxXY;
-	boxUVs = boxUVs * float4(0.5, 0.5, 0.5, 0.5) + float4(0.5, 0.5, 0.5, 0.5);
-	float2 minXY = boxUVs.xy;
-	float2 maxXY = boxUVs.zw;
-
-	// Calculate hi-Z buffer mip
-	int2 size = (maxXY - minXY) * _HiZTextureSize.xy;
-	float mip = ceil(log2(max(size.x, size.y)));
-	mip = clamp(mip, 0, 10);
-
-	// Texel footprint for the lower (finer-grained) level
-	float  level_lower = max(mip - 1, 0);
-	float2 scale = exp2(-level_lower);
-	float2 a = floor(boxUVs.xy*scale);
-	float2 b = ceil(boxUVs.zw*scale);
-	float2 dims = b - a;
-
-	// Use the lower level if we only touch <= 2 texels in both dimensions
-	if (dims.x <= 2 && dims.y <= 2)
-	{
-		mip = level_lower;
-	}
-
-	// load depths from high z buffer
-	float4 depth = {
-		_HiZMap.SampleLevel(sampler_HiZMap, boxUVs.xy, mip).r,
-		_HiZMap.SampleLevel(sampler_HiZMap, boxUVs.zy, mip).r,
-		_HiZMap.SampleLevel(sampler_HiZMap, boxUVs.xw, mip).r,
-		_HiZMap.SampleLevel(sampler_HiZMap, boxUVs.zw, mip).r
-	};
-
-	// find the max depth
-	const float epsilon = 0.001;
-	float furthestDepth = min(min(min(depth.x, depth.y), depth.z), depth.w) - epsilon;
-	uint isOccluded = (1.0 - box.clipMinZ) <= furthestDepth;
-	return _ShouldOcclusionCull * isInstanceInFrontOfCamera * isOccluded;
-}
-
-inline uint ShouldFrustumCull(BoundingBox box, InstanceData instance, float4x4 worldToShadowMatrix, uint isInstanceInFrontOfCamera)
-{
-	// Shadow map...
-
-	// We need to adjust the lower bounds check depending on the number of cascades
-	float lowerX = 0.0 + 0.5 * saturate(_Cascades - 1); // Add 0.5 to X for 2&4 Cascades
-	float lowerY = 0.0 + 0.5 * saturate(_Cascades - 3);	// Add 0.5 to Y for 4 Cascades
-
-	// Don't frustum cull instances in the shadow map
-	uint isInShadowMap = 
-			(box.clipLightMinMaxXY.x < 1.0) 
-		*	(box.clipLightMinMaxXY.z > lowerX)
-		* 	(box.clipLightMinMaxXY.y < 1.0) 
-		* 	(box.clipLightMinMaxXY.w > lowerY);
-	
-	// Camera Frustum...
-	uint isInCameraFrustum = (
-			(box.clipMaxZ < 1.0)
-		* 	(box.clipMinMaxXY.x < 1.0)
-		* 	(box.clipMinMaxXY.x > -10.0)
-		* 	(box.clipMinMaxXY.z > -1.0)
-		* 	(box.clipMinMaxXY.y < 1.0)
-		* 	(box.clipMinMaxXY.w > -1.0)
-	);
-
-	return _ShouldFrustumCull * !isInShadowMap * !isInCameraFrustum;
-}
-
-inline void AddInstanceToVisibleList(uint tID, InstanceData instance)
-{
-	// Mark the instance as visible
-	_IsVisibleBuffer[tID] = 1;
-
-	// Mark it as a shadow caster
-	InterlockedAdd(_ArgsBuffer[instance.drawCallID + 16], 1);
+    // Change it to 0 - 1 range 
+    float2 minXY = float2(clipMinX, clipMinY) * 0.5 + 0.5;
+    float2 maxXY = float2(clipMaxX, clipMaxY) * 0.5 + 0.5;
     
-	// Assign the correct LOD
-
-	// LOD02
-	if (_ShouldLOD == 0 || instance.distanceToCamera > LOD01_RANGE)
-	{
-		InterlockedAdd(_ArgsBuffer[instance.drawCallID + 11], 1);
-	}
-	// LOD01
-	else if (instance.distanceToCamera > LOD00_RANGE)
-	{
-		InterlockedAdd(_ArgsBuffer[instance.drawCallID + 6], 1);
-	}
-	// LOD00
-	else
-	{
-		InterlockedAdd(_ArgsBuffer[instance.drawCallID + 1], 1);
-	}
+    // Calculate hi-Z buffer mip
+    int2 size = (maxXY - minXY) * _HiZTextureSize.xy;
+    float mip = ceil(log2(max(size.x, size.y)));
+    mip = clamp(mip, 0, 10);
+    
+    // Texel footprint for the lower (finer-grained) level
+    float  level_lower = max(mip - 1, 0);
+    float2 scale = exp2(-level_lower);
+    float2 a = floor(minXY * scale);
+    float2 b = ceil(maxXY * scale);
+    float2 dims = b - a;
+    
+    // Use the lower level if we only touch <= 2 texels in both dimensions
+    if (dims.x <= 2 && dims.y <= 2)
+    {
+        mip = level_lower;
+    }
+    
+    // find the max depth
+    // Hi-Z approach that allows for more samples.
+    // https://www.gamedev.net/blogs/entry/2249535-hierarchical-z-buffer-occlusion-culling-updated-07152011/
+    //const   int numSamples = 24;
+    const   int   xSamples = 8; // numSamples + 1;
+    const   int   ySamples = 25; // numSamples + 1;
+    const  float    widthSS = (maxXY.x - minXY.x);
+    const  float   heightSS = (maxXY.y - minXY.y);    
+    const  float  maxSizeSS = max(widthSS * _HiZTextureSize.x, heightSS * _HiZTextureSize.y);    
+    const  float      stepX = widthSS / xSamples;    
+    const  float      stepY = heightSS / ySamples;    
+    
+    float HIZdepth = 1;    
+    float yPos = minXY.y;
+    for(int y = 0; y < ySamples; ++y)
+    {
+        float xPos = minXY.x;
+        for(int x = 0; x < xSamples; ++x)
+        {
+            const float2 nCoords0 = float2(xPos, yPos);
+            HIZdepth = min(HIZdepth, _HiZMap.SampleLevel(sampler_HiZMap, nCoords0, mip).r);
+            xPos += stepX;
+        }
+        yPos += stepY;    
+    }
+    
+    return (1.0 - clipMinZ) >= HIZdepth - 0.000015; // last is an epsilon
 }
+
+inline uint IsVisibleAfterFrustumCulling(float4 clipPos)
+{
+    return (clipPos.z > clipPos.w 
+            || clipPos.x < -clipPos.w 
+            || clipPos.x > clipPos.w 
+            || clipPos.y < -clipPos.w 
+            || clipPos.y > clipPos.w) 
+            ? 0 : 1;
+}
+
+//--------------------------------------------------------------------------------------
+// Kernels
+//--------------------------------------------------------------------------------------
 
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 inline void CSMain (
-		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
-		in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
-		in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
-		in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
-	)        
+        in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
+        in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
+        in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
+        in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
+    )
 {
     // Calculate the instance index
-	uint tID = _dispatchThreadID.x;
-	
-	// If this is a dummmy instance used for padding the buffers to power of two...
-	if (_InstanceDataBuffer[tID].drawCallID == 666)
-	{
-		return;
-	}
+    uint tID = _dispatchThreadID.x;
+    SortingData sortingData = _SortingData[tID];
+    uint drawCall = (sortingData.drawCallInstanceIndex >> 16);
+    uint index = (sortingData.drawCallInstanceIndex) & 0xFFFF;
 
-	// Reset the is visible state
-	_IsVisibleBuffer[tID] = 0;
+    // Reset the is visible state
+    _IsVisibleBuffer[tID] = 0;
+    _ShadowIsVisibleBuffer[tID] = 0;
 
-	// Get the instance data
-	InstanceData instance = _InstanceDataBuffer[tID];
-	
-	// Calculate the world to shadow matrix
-	float4x4 worldToShadowMatrix = CalculateWorldToShadowMatrix();
+    // Get the instance data
+    InstanceData instance = _InstanceDataBuffer[index];
 
-	// Calculate the bounding box, camera clip min/max and shadowmap clip min/max
-	BoundingBox box = CalculateBoundingBoundingBox(tID, instance.position + instance.boundsCenter, instance.boundsExtents, worldToShadowMatrix);
-	uint isInstanceInFrontOfCamera = (box.clipMaxZ < 1);
-	
-	// We only cull instances where the camera doesn't intersect the instance 
-	// bounds. If the camera is inside the bounds we want to render the object
-	uint shouldBeRendered = 1;
-	if (IsCameraOutsideObjBounds(box, worldToShadowMatrix))
-	{
-		// Do we pass the frustum culling...?
-		shouldBeRendered *= !ShouldFrustumCull(box, instance, worldToShadowMatrix, isInstanceInFrontOfCamera);
-	
-		// Do we pass the occlusion culling...?
-		shouldBeRendered *= !ShouldHiZCull(instance, instance.boundsCenter, box, isInstanceInFrontOfCamera);
+    // Check if the instance is visible
+    float3 minPos = instance.boundsCenter - instance.boundsExtents;
+    float3 maxPos = instance.boundsCenter + instance.boundsExtents;
 
-		// Do we pass the detail (screen size) culling...?
-		shouldBeRendered *= !ShouldDetailCull(box, isInstanceInFrontOfCamera);
-	}
-	
-	if (shouldBeRendered == 0)
-	{
-		return;
-	}
+    float4 boxCorners[8];
+    boxCorners[0] = float4(minPos.x, minPos.y, minPos.z, 1.0);
+    boxCorners[1] = float4(minPos.x, minPos.y, maxPos.z, 1.0);
+    boxCorners[2] = float4(minPos.x, maxPos.y, minPos.z, 1.0);
+    boxCorners[3] = float4(minPos.x, maxPos.y, maxPos.z, 1.0);
+    boxCorners[4] = float4(maxPos.x, minPos.y, minPos.z, 1.0);
+    boxCorners[5] = float4(maxPos.x, minPos.y, maxPos.z, 1.0);
+    boxCorners[6] = float4(maxPos.x, maxPos.y, minPos.z, 1.0);
+    boxCorners[7] = float4(maxPos.x, maxPos.y, maxPos.z, 1.0);
 
-	// Woohoo! The object is visible and should be rendered!
-	AddInstanceToVisibleList(tID, instance);	
+    float4 clipPos = mul(_UNITY_MATRIX_MVP, boxCorners[0]);
+    uint isInFrustum = IsVisibleAfterFrustumCulling(clipPos);
+
+    clipPos.xyz = clipPos.xyz / clipPos.w;
+    float clipMinX = clipPos.x;
+    float clipMaxX = clipPos.x;
+    float clipMinY = clipPos.y;
+    float clipMaxY = clipPos.y;
+    float clipMinZ = clipPos.z;
+
+    float minDistanceToCamera = distance(instance.boundsCenter.xyz, _CamPosition.xyz);
+    [unroll]
+    for (int i = 1; i < 8; i++)
+    {
+        clipPos = mul(_UNITY_MATRIX_MVP, boxCorners[i]);
+
+        // For Frustum
+        isInFrustum = saturate(isInFrustum + IsVisibleAfterFrustumCulling(clipPos));
+
+        // For HiZ
+        clipPos.xyz = clipPos.xyz / clipPos.w;
+        clipMinX = min(clipPos.x, clipMinX);
+        clipMaxX = max(clipPos.x, clipMaxX);
+        clipMinY = min(clipPos.y, clipMinY);
+        clipMaxY = max(clipPos.y, clipMaxY);
+        clipMinZ = min(clipPos.z, clipMinZ);
+
+        // For LODing
+        minDistanceToCamera = min(distance(boxCorners[i].xyz, _CamPosition.xyz), minDistanceToCamera);
+    }
+
+    // We only cull instances where the camera doesn't intersect the instance 
+    // bounds. If the camera is inside the bounds we want to render the object
+    uint isVisible = 1;
+    if (IsCameraOutsideObjBounds(_CamPosition, minPos, maxPos))
+    {
+        // Do we pass the frustum culling...?
+        isVisible *= _ShouldFrustumCull ? isInFrustum : 1;
+
+        // Do we pass the occlusion culling...?
+        isVisible *= (_ShouldOcclusionCull * isVisible > 0) ? IsVisibleAfterOcclusionCulling(instance, clipMinX, clipMaxX, clipMinY, clipMaxY, clipMinZ) : 1;
+
+        // // // Do we pass the detail (screen size) culling...?
+        isVisible *= (_ShouldDetailCull * isVisible > 0) ? IsVisibleAfterDetailCulling(clipMinX, clipMaxX, clipMinY, clipMaxY) : 1;
+    }
+
+    float lod00Range = LOD00_RANGE;
+    float lod01Range = LOD01_RANGE;
+
+    // Calculate the correct index to the arguments buffers
+    uint argsIndex = drawCall + 1;    
+    argsIndex += 5 * (minDistanceToCamera > lod00Range);
+    argsIndex += 5 * (minDistanceToCamera > lod01Range);
+    argsIndex = _ShouldLOD * argsIndex + ((_ShouldLOD == 0) * (drawCall + 11));
+    
+    uint shadowArgsIndex = argsIndex;//_ShouldOnlyUseLOD02Shadows ? drawCall + 11 : argsIndex;
+
+    // Mark it as a shadow caster if it's within shadow distance...
+    uint isCastingShadow = minDistanceToCamera < _ShadowDistance ? 1 : 0;
+
+    // Output
+    _IsVisibleBuffer[tID] = isVisible;
+    InterlockedAdd(_ArgsBuffer[argsIndex], isVisible);
+
+    _ShadowIsVisibleBuffer[tID] = isCastingShadow;
+    InterlockedAdd(_ShadowArgsBuffer[shadowArgsIndex], isCastingShadow);
+
+    sortingData.distanceToCam = minDistanceToCamera;
+    _SortingData[tID] = sortingData;
 }

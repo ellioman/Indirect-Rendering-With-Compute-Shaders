@@ -34,7 +34,7 @@ public class HiZBuffer : MonoBehaviour
     // Public Properties
     public int DebugLodLevel { get; set; }
     public Vector2 TextureSize { get { return m_textureSize; } }
-    public RenderTexture HiZDepthTexture { get { return m_HiZDepthTexture; } }
+    public RenderTexture Texture { get { return m_HiZDepthTexture; } }
 
     // Consts
     private const int MAXIMUM_BUFFER_SIZE = 1024;
@@ -59,19 +59,19 @@ public class HiZBuffer : MonoBehaviour
 
     public void Start()
     {
-        m_shadowmap = BuiltinRenderTextureType.CurrentActive;
-        m_ShadowmapCopy = new RenderTexture(1024, 1024, 0, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
+        // m_shadowmap = BuiltinRenderTextureType.CurrentActive;
+        // m_ShadowmapCopy = new RenderTexture(1024, 1024, 0, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
         
-        m_lightShadowCommandBuffer = new CommandBuffer();
+        // m_lightShadowCommandBuffer = new CommandBuffer();
         
-        // Change shadow sampling mode for m_Light's shadowmap.
-        m_lightShadowCommandBuffer.SetShadowSamplingMode(m_shadowmap, ShadowSamplingMode.RawDepth);
+        // // Change shadow sampling mode for m_Light's shadowmap.
+        // m_lightShadowCommandBuffer.SetShadowSamplingMode(m_shadowmap, ShadowSamplingMode.RawDepth);
         
-        // The shadowmap values can now be sampled normally - copy it to a different render texture.
-        m_lightShadowCommandBuffer.Blit(m_shadowmap, new RenderTargetIdentifier(m_ShadowmapCopy));
+        // // The shadowmap values can now be sampled normally - copy it to a different render texture.
+        // m_lightShadowCommandBuffer.Blit(m_shadowmap, new RenderTargetIdentifier(m_ShadowmapCopy));
         
-        // Execute after the shadowmap has been filled.
-        light.AddCommandBuffer(LightEvent.AfterShadowMapPass, m_lightShadowCommandBuffer);
+        // // Execute after the shadowmap has been filled.
+        // light.AddCommandBuffer(LightEvent.AfterShadowMapPass, m_lightShadowCommandBuffer);
         
         // Sampling mode is restored automatically after this command buffer completes, so shadows will render normally.
     }
@@ -92,6 +92,26 @@ public class HiZBuffer : MonoBehaviour
             m_HiZDepthTexture.Release();
             m_HiZDepthTexture = null;
         }
+    }
+    
+    public void InitializeTexture()
+    {
+        if (m_HiZDepthTexture != null)
+        {
+            m_HiZDepthTexture.Release();
+        }
+        
+        int size = (int)Mathf.Max((float)mainCamera.pixelWidth, (float)mainCamera.pixelHeight);
+        size = (int)Mathf.Min((float)Mathf.NextPowerOfTwo(size), (float)MAXIMUM_BUFFER_SIZE);
+        m_textureSize.x = size;
+        m_textureSize.y = size;
+        
+        m_HiZDepthTexture = new RenderTexture(size, size, 0, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
+        m_HiZDepthTexture.filterMode = FilterMode.Point;
+        m_HiZDepthTexture.useMipMap = true;
+        m_HiZDepthTexture.autoGenerateMips = false;
+        m_HiZDepthTexture.Create();
+        m_HiZDepthTexture.hideFlags = HideFlags.HideAndDontSave;
     }
 
     private void OnPreRender()
@@ -114,17 +134,7 @@ public class HiZBuffer : MonoBehaviour
             || m_lastCameraEvent != m_CameraEvent
             )
         {
-            if (m_HiZDepthTexture != null)
-            {
-                m_HiZDepthTexture.Release();
-            }
-            
-            m_HiZDepthTexture = new RenderTexture(size, size, 0, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
-            m_HiZDepthTexture.filterMode = FilterMode.Point;
-            m_HiZDepthTexture.useMipMap = true;
-            m_HiZDepthTexture.autoGenerateMips = false;
-            m_HiZDepthTexture.Create();
-            m_HiZDepthTexture.hideFlags = HideFlags.HideAndDontSave;
+            InitializeTexture();
             
             m_lastCameraEvent = m_CameraEvent;
             isCommandBufferInvalid = true;
@@ -183,14 +193,15 @@ public class HiZBuffer : MonoBehaviour
             Camera.main.rect = new Rect(0.0f, 0.5f, 0.5f, 0.5f);
             Graphics.Blit(source, destination);
             
+            
             Camera.main.rect = new Rect(0.0f, 0.0f, 0.5f, 0.5f);
-            m_debugMaterial.SetInt("_LOD", DebugLodLevel);
             m_debugMaterial.SetInt("_NUM", 0);
+            m_debugMaterial.SetInt("_LOD", m_indirectRenderer.debugHiZLOD);
             Graphics.Blit(m_HiZDepthTexture, destination, m_debugMaterial);
             
             Camera.main.rect = new Rect(0.5f, 0.0f, 0.5f, 0.5f);
-            m_debugMaterial.SetInt("_LOD", DebugLodLevel);
             m_debugMaterial.SetInt("_NUM", 1);
+            m_debugMaterial.SetInt("_LOD", 0);
             Graphics.Blit(m_HiZDepthTexture, destination, m_debugMaterial);
             
             Camera.main.rect = new Rect(0.5f, 0.5f, 0.5f, 0.5f);

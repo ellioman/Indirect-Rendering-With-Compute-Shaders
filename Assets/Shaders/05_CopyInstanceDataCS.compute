@@ -24,61 +24,64 @@
 
 cbuffer CB
 {
-	uint _NumberOfInstanceTypes;
+    uint _NumOfDrawcalls;
 }
 
 //--------------------------------------------------------------------------------------
 // Structured Buffers
 //--------------------------------------------------------------------------------------
 
-StructuredBuffer<InstanceData> _InstanceData;
-StructuredBuffer<InstanceDrawData> _InstanceDrawData;
-Buffer<uint> _InstancePredicatesIn;
-Buffer<uint> _GroupSumArray;
-Buffer<uint> _ScannedInstancePredicates;
-RWStructuredBuffer<InstanceDrawData> _InstanceDataOut;
-RWBuffer<uint> _DrawcallDataOut;
+StructuredBuffer<SortingData> _SortingData;
+StructuredBuffer<Indirect2x2Matrix> _InstancesDrawMatrixRows01;
+StructuredBuffer<Indirect2x2Matrix> _InstancesDrawMatrixRows23;
+StructuredBuffer<Indirect2x2Matrix> _InstancesDrawMatrixRows45;
+
+StructuredBuffer<uint> _InstancePredicatesIn;
+StructuredBuffer<uint> _GroupSumArray;
+StructuredBuffer<uint> _ScannedInstancePredicates;
+RWStructuredBuffer<uint> _DrawcallDataOut;
+RWStructuredBuffer<Indirect2x2Matrix> _InstancesCulledMatrixRows01;
+RWStructuredBuffer<Indirect2x2Matrix> _InstancesCulledMatrixRows23;
+RWStructuredBuffer<Indirect2x2Matrix> _InstancesCulledMatrixRows45;
+
 //--------------------------------------------------------------------------------------
 // Kernels & Functions
 //--------------------------------------------------------------------------------------
 
-
 // Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 inline void CSMain (
-		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
-		in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
-		in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
-		in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
-	)        
+        in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
+        in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
+        in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
+        in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
+    )
 {
-	uint tID = _dispatchThreadID.x;
-	uint groupID = _groupID.x;
-	uint groupSum = _groupID.x > 0 ? _GroupSumArray[_groupID.x] : 0;
+    uint tID = _dispatchThreadID.x;
+    uint groupID = _groupID.x;
+    uint groupSum = _groupID.x > 0 ? _GroupSumArray[_groupID.x] : 0;
 
-	//scatter results
-	if (_InstancePredicatesIn[tID] == 1)
-	{
-		uint instanceDataOutIndex = _ScannedInstancePredicates[tID] + groupSum;
-        _InstanceDataOut[instanceDataOutIndex] = _InstanceDrawData[_InstanceData[tID].drawDataID];
-	}
-
-	if ((tID == 0) * (groupID == 0))
-	{
-		//patch up the visible instance counts per prop type 
-		for (uint k = 1; k < _NumberOfInstanceTypes; k++)
-		{
-			// If we're updating the shadow args...
-			if ((k + 1) % 4 == 0)
-			{
-				// Make them have the same offset as LOD00...
-				_DrawcallDataOut[k * 5 + 4] = _DrawcallDataOut[(k - 3) * 5 + 4];
-			}
-			else
-			{
-				_DrawcallDataOut[k * 5 + 4] = _DrawcallDataOut[(k - 1) * 5 + 4] +	//previous prop type offset 
-											_DrawcallDataOut[(k - 1) * 5 + 1];	//previous prop type number of instances
-			}
-		}
-	}
+    //scatter results
+    if (_InstancePredicatesIn[tID] == 1)
+    {
+        uint instanceDataOutIndex = _ScannedInstancePredicates[tID] + groupSum;
+        uint drawInstanceIndex = _SortingData[tID].drawCallInstanceIndex & 0xFFFF;
+        
+        _InstancesCulledMatrixRows01[instanceDataOutIndex] = _InstancesDrawMatrixRows01[drawInstanceIndex];
+        _InstancesCulledMatrixRows23[instanceDataOutIndex] = _InstancesDrawMatrixRows23[drawInstanceIndex];
+        _InstancesCulledMatrixRows45[instanceDataOutIndex] = _InstancesDrawMatrixRows45[drawInstanceIndex];
+    }
+    
+    
+    
+    if ((tID == 0) * (groupID == 0))
+    {
+        //patch up the visible instance counts per prop type
+        for (uint k = 1; k < _NumOfDrawcalls; k++)
+        {
+            _DrawcallDataOut[k * 5 + 4] = _DrawcallDataOut[(k - 1) * 5 + 4] +    //previous prop type offset 
+                                          _DrawcallDataOut[(k - 1) * 5 + 1];    //previous prop type number of instances
+        }
+    }
+    
 }

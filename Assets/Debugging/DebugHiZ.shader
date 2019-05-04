@@ -48,7 +48,7 @@
     float4 fragment(in Varyings input) : SV_Target
     {
         float4 output = _MainTex.SampleLevel(sampler_MainTex, input.uv, _LOD);
-        return (_NUM == 0) ? output.r * 100 : output.g;
+        return lerp(output.r * 100, output.g, _NUM);
     }
     ENDCG
 

@@ -52,7 +52,7 @@ float4 blit(in Varyings input) : SV_Target
 float4 reduce(in Varyings input) : SV_Target
 {
     #if SHADER_API_METAL
-        int2 xy = (int2) (input.uv * (_MainTex_TexelSize.zw - 1.));
+        int2 xy = (int2) (input.uv * (_MainTex_TexelSize.zw - 1));
         float4 texels[2] = {
             float4(_MainTex.mips[0][xy].rg, _MainTex.mips[0][xy + int2(1, 0)].rg),
             float4(_MainTex.mips[0][xy + int2(0, 1)].rg, _MainTex.mips[0][xy + 1].rg)

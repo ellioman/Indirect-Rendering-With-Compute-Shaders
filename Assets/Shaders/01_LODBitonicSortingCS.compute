@@ -24,75 +24,75 @@
 
 cbuffer CB
 {
-	uint _Level;
-	uint _LevelMask;
-	uint _Width;
-	uint _Height;
+    uint _Level;
+    uint _LevelMask;
+    uint _Width;
+    uint _Height;
 };
 
 //--------------------------------------------------------------------------------------
 // Structured Buffers
 //--------------------------------------------------------------------------------------
 
-StructuredBuffer  <InstanceData> Input;
-RWStructuredBuffer<InstanceData> Data;
+StructuredBuffer<SortingData> _Input;
+RWStructuredBuffer<SortingData> _Data;
+
 
 //--------------------------------------------------------------------------------------
 // Bitonic Sort Compute Shader
 //--------------------------------------------------------------------------------------
-groupshared InstanceData shared_data[BITONIC_BLOCK_SIZE];
+groupshared SortingData _SharedData[BITONIC_BLOCK_SIZE];
 
 [numthreads(BITONIC_BLOCK_SIZE, 1, 1)]
-void BitonicSort(uint3 Gid  : SV_GroupID, 
-				 uint3 DTid : SV_DispatchThreadID, 
-				 uint3 GTid : SV_GroupThreadID, 
-				 uint  GI   : SV_GroupIndex)
+void BitonicSort(
+    uint3 Gid  : SV_GroupID, 
+    uint3 DTid : SV_DispatchThreadID, 
+    uint3 GTid : SV_GroupThreadID, 
+    uint  GI   : SV_GroupIndex)
 {
-	// Load shared data
-	uint tID = DTid.x;
+    uint tID = DTid.x;
+    _SharedData[GI] = _Data[tID];
+    GroupMemoryBarrierWithGroupSync();
 
-	shared_data[GI] = Data[tID];
-	GroupMemoryBarrierWithGroupSync();
-
-	// Sort the shared data
-	for (uint j = _Level >> 1; j > 0; j >>= 1)
+    // Sort the shared data
+    for (uint j = _Level >> 1; j > 0; j >>= 1)
     {
-        InstanceData result = shared_data[GI];
-        InstanceData inst1 = shared_data[GI & ~j];
-        InstanceData inst2 = shared_data[GI | j];
-
-        float dist1 = inst1.drawCallID * 5000 + inst1.distanceToCamera;
-        float dist2 = inst2.drawCallID * 5000 + inst2.distanceToCamera;
+        SortingData result = _SharedData[GI];
+        SortingData inst1 = _SharedData[GI & ~j];
+        SortingData inst2 = _SharedData[GI | j];
+        
+        float dist1 = (inst1.drawCallInstanceIndex >> 16) * 5000 + inst1.distanceToCam;
+        float dist2 = (inst2.drawCallInstanceIndex >> 16) * 5000 + inst2.distanceToCam;
 
         if ((dist1 <= dist2) == ((bool)(_LevelMask & tID)))
         {
-            result = shared_data[GI ^ j];
+            result = _SharedData[GI ^ j];
         }
-
         GroupMemoryBarrierWithGroupSync();
 
-        shared_data[GI] = result;
+        _SharedData[GI] = result;
         GroupMemoryBarrierWithGroupSync();
     }
 
-	// Store shared data
-	Data[tID] = shared_data[GI];
+    // Store shared data
+    _Data[tID] = _SharedData[GI];
 }
 
 //--------------------------------------------------------------------------------------
 // Matrix Transpose Compute Shader
 //--------------------------------------------------------------------------------------
-groupshared InstanceData transpose_shared_data[TRANSPOSE_BLOCK_SIZE * TRANSPOSE_BLOCK_SIZE];
+groupshared SortingData _SharedTransposeData[TRANSPOSE_BLOCK_SIZE * TRANSPOSE_BLOCK_SIZE];
 
 [numthreads(TRANSPOSE_BLOCK_SIZE, TRANSPOSE_BLOCK_SIZE, 1)]
-void MatrixTranspose(uint3 Gid  : SV_GroupID, 
-					 uint3 DTid : SV_DispatchThreadID, 
-					 uint3 GTid : SV_GroupThreadID, 
-					 uint  GI   : SV_GroupIndex)
+void MatrixTranspose(
+    uint3 Gid  : SV_GroupID, 
+    uint3 DTid : SV_DispatchThreadID, 
+    uint3 GTid : SV_GroupThreadID, 
+    uint  GI   : SV_GroupIndex)
 {
-	transpose_shared_data[GI] = Input[DTid.y * _Width + DTid.x];
-	GroupMemoryBarrierWithGroupSync();
+    _SharedTransposeData[GI] = _Input[DTid.y * _Width + DTid.x];
+    GroupMemoryBarrierWithGroupSync();
 
-	uint2 XY = DTid.yx - GTid.yx + GTid.xy;
-	Data[XY.y * _Height + XY.x] = transpose_shared_data[GTid.x * TRANSPOSE_BLOCK_SIZE + GTid.y];
+    uint2 XY = DTid.yx - GTid.yx + GTid.xy;
+    _Data[XY.y * _Height + XY.x] = _SharedTransposeData[GTid.x * TRANSPOSE_BLOCK_SIZE + GTid.y];
 }

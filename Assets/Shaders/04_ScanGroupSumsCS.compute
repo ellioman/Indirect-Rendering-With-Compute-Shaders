@@ -24,16 +24,16 @@
 
 cbuffer CB
 {
-	int _NumOfGroups;
-	groupshared uint temp[2 * THREAD_GROUP_SIZE_X];
+    int _NumOfGroups;
+    groupshared uint temp[2 * THREAD_GROUP_SIZE_X];
 }
 
 //--------------------------------------------------------------------------------------
 // Structured Buffers
 //--------------------------------------------------------------------------------------
 
-Buffer<uint> _GroupSumArrayIn;
-RWBuffer<uint> _GroupSumArrayOut;
+StructuredBuffer<uint> _GroupSumArrayIn;
+RWStructuredBuffer<uint> _GroupSumArrayOut;
 
 //--------------------------------------------------------------------------------------
 // Kernels & Functions
@@ -42,63 +42,63 @@ RWBuffer<uint> _GroupSumArrayOut;
 // Based on Parallel Prefix Sum (Scan) with CUDA by Mark Harris
 [numthreads(THREAD_GROUP_SIZE_X, THREAD_GROUP_SIZE_Y, THREAD_GROUP_SIZE_Z)]
 inline void CSMain (
-		in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
-		in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
-		in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
-		in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
-	)        
+        in uint3 _dispatchThreadID : SV_DispatchThreadID, // DispatchThreadID  = dot(GroupID, numthreads) + GroupThreadId;
+        in uint  _groupIndex       : SV_GroupIndex, // uint GroupIndex = unique index of a thread inside a group
+        in uint3 _groupID          : SV_GroupID, // GroupID = index for each dimension inside a ThreadGroupCount 
+        in uint3 _groupThreadID    : SV_GroupThreadID // uint3 GroupThreadId = indices for each dimension inside a group of the current thread
+    )        
 {
-	int tID = (int) _dispatchThreadID.x;
+    int tID = (int) _dispatchThreadID.x;
 
-	int groupTID = (int) _groupThreadID.x;
-	int groupID = (int) _groupID.x;
+    int groupTID = (int) _groupThreadID.x;
+    int groupID = (int) _groupID.x;
 
-	int offset = 1;
-	temp[2 * groupTID] = _GroupSumArrayIn[2 * tID]; // load input into shared memory
-	temp[2 * groupTID + 1] = _GroupSumArrayIn[2 * tID + 1];
+    int offset = 1;
+    temp[2 * groupTID] = _GroupSumArrayIn[2 * tID]; // load input into shared memory
+    temp[2 * groupTID + 1] = _GroupSumArrayIn[2 * tID + 1];
 
-	
-	int d;
-	
-	//perform reduction
-	for (d = _NumOfGroups >> 1; d > 0; d >>= 1)
-	{
-		GroupMemoryBarrierWithGroupSync();
+    
+    int d;
+    
+    //perform reduction
+    for (d = _NumOfGroups >> 1; d > 0; d >>= 1)
+    {
+        GroupMemoryBarrierWithGroupSync();
 
-		if (groupTID < d)
-		{
-			int ai = offset * (2 * groupTID + 1) - 1;
-			int bi = offset * (2 * groupTID + 2) - 1;
-			temp[bi] += temp[ai];
-		}
-		offset *= 2;
-	}
+        if (groupTID < d)
+        {
+            int ai = offset * (2 * groupTID + 1) - 1;
+            int bi = offset * (2 * groupTID + 2) - 1;
+            temp[bi] += temp[ai];
+        }
+        offset *= 2;
+    }
 
-	// clear the last element
-	if (tID == 0)
-	{
-		temp[_NumOfGroups - 1] = 0;
-	}
+    // clear the last element
+    if (tID == 0)
+    {
+        temp[_NumOfGroups - 1] = 0;
+    }
 
-	//perform downsweep and build scan
-	for (d = 1; d < _NumOfGroups; d *= 2)
-	{
-		offset >>= 1;
+    //perform downsweep and build scan
+    for (d = 1; d < _NumOfGroups; d *= 2)
+    {
+        offset >>= 1;
 
-		GroupMemoryBarrierWithGroupSync();
+        GroupMemoryBarrierWithGroupSync();
 
-		if (tID < d)
-		{
-			int ai = offset * (2 * groupTID + 1) - 1;
-			int bi = offset * (2 * groupTID + 2) - 1;
-			int t = temp[ai];
-			temp[ai] = temp[bi];
-			temp[bi] += t;
-		}
-	}
+        if (tID < d)
+        {
+            int ai = offset * (2 * groupTID + 1) - 1;
+            int bi = offset * (2 * groupTID + 2) - 1;
+            int t = temp[ai];
+            temp[ai] = temp[bi];
+            temp[bi] += t;
+        }
+    }
 
-	GroupMemoryBarrierWithGroupSync();
+    GroupMemoryBarrierWithGroupSync();
 
-	_GroupSumArrayOut[2 * tID] = temp[2 * tID]; // store to main memory
-	_GroupSumArrayOut[2 * tID + 1] = temp[2 * tID + 1];
+    _GroupSumArrayOut[2 * tID] = temp[2 * tID]; // store to main memory
+    _GroupSumArrayOut[2 * tID + 1] = temp[2 * tID + 1];
 }

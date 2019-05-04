@@ -4,30 +4,20 @@
 
 struct InstanceData
 {
-	uint drawDataID;				// 1
-	uint drawCallID;				// 2
-	float3 position;				// 5
-	float3 rotation;				// 8
-	float uniformScale;				// 9
-	float3 boundsCenter;			// 12
-	float3 boundsExtents;			// 15
-	float distanceToCamera;			// 16
+    float3 boundsCenter;         // 3
+    float3 boundsExtents;        // 6
 };
 
-struct InstanceDrawData
+struct Indirect2x2Matrix
 {
-	float4x4 unity_ObjectToWorld;	// 16
-	float4x4 unity_WorldToObject;	// 32
+    float4 row0;    // 4
+    float4 row1;    // 8
 };
 
-struct BoundingBox
+struct SortingData
 {
-	float3 minPos;					// 3
-	float3 maxPos;					// 6
-	float4 clipMinMaxXY;			// 10
-	float clipMinZ;					// 11
-	float clipMaxZ;					// 12
-	float4 clipLightMinMaxXY;		// 16
+    uint drawCallInstanceIndex; // 1
+    float distanceToCam;         // 2
 };
 
 #endif
